@@ -98,6 +98,37 @@ CREATE TRIGGER jugador_borrar_partida_trg
     AFTER DELETE ON public.jugador
     FOR EACH ROW EXECUTE FUNCTION public.eliminar_partida_de_jugador();
 
+-- Reiniciar automáticamente la secuencia de ID de jugador al eliminar registros
+CREATE OR REPLACE FUNCTION public.auto_reiniciar_id_jugador()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    max_id bigint;
+    seq_name text;
+BEGIN
+    seq_name := pg_get_serial_sequence('public.jugador', 'id');
+    IF seq_name IS NOT NULL THEN
+        SELECT MAX(id) INTO max_id FROM public.jugador;
+        IF max_id IS NULL THEN
+            -- Si la tabla quedó totalmente vacía, reiniciar a 1
+            EXECUTE format('ALTER SEQUENCE %s RESTART WITH 1', seq_name);
+        ELSE
+            -- Si quedan registros, ajustar la secuencia al máximo ID actual
+            PERFORM setval(seq_name, max_id, true);
+        END IF;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS jugador_auto_reiniciar_id_trg ON public.jugador;
+CREATE TRIGGER jugador_auto_reiniciar_id_trg
+    AFTER DELETE ON public.jugador
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION public.auto_reiniciar_id_jugador();
+
 -- ---------------------------------------------------------------------
 -- 3. Partidas: una fila por cada jugador (SOLO 1 OPORTUNIDAD POR JUGADOR)
 -- ---------------------------------------------------------------------
@@ -177,6 +208,37 @@ DROP TRIGGER IF EXISTS partida_validar ON public.partida;
 CREATE TRIGGER partida_validar
     BEFORE INSERT OR UPDATE ON public.partida
     FOR EACH ROW EXECUTE FUNCTION public.validar_partida();
+
+-- Reiniciar automáticamente la secuencia de ID de partida al eliminar registros
+CREATE OR REPLACE FUNCTION public.auto_reiniciar_id_partida()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    max_id bigint;
+    seq_name text;
+BEGIN
+    seq_name := pg_get_serial_sequence('public.partida', 'id');
+    IF seq_name IS NOT NULL THEN
+        SELECT MAX(id) INTO max_id FROM public.partida;
+        IF max_id IS NULL THEN
+            -- Si la tabla quedó totalmente vacía, reiniciar a 1
+            EXECUTE format('ALTER SEQUENCE %s RESTART WITH 1', seq_name);
+        ELSE
+            -- Si quedan partidas, ajustar la secuencia al máximo ID actual
+            PERFORM setval(seq_name, max_id, true);
+        END IF;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS partida_auto_reiniciar_id_trg ON public.partida;
+CREATE TRIGGER partida_auto_reiniciar_id_trg
+    AFTER DELETE ON public.partida
+    FOR EACH STATEMENT
+    EXECUTE FUNCTION public.auto_reiniciar_id_partida();
 
 -- ---------------------------------------------------------------------
 -- 5. Vistas de Ranking

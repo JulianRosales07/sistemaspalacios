@@ -208,14 +208,21 @@ export async function cargarPerfilServidor(cedula, token) {
       }
       if (jugadorData.perfil.avatar) {
         perfil.avatar = jugadorData.perfil.avatar;
-        perfil.configuroAvatar = true;
+      }
+      if (typeof jugadorData.perfil.configuroAvatar === 'boolean') {
+        perfil.configuroAvatar = jugadorData.perfil.configuroAvatar;
       }
     }
 
     // Si jugadorData tiene columna avatar directamente en Supabase, lo cargamos
     if (jugadorData && jugadorData.avatar && typeof jugadorData.avatar === 'object') {
       perfil.avatar = jugadorData.avatar;
-      perfil.configuroAvatar = true;
+      // NOTA: NO marcar configuroAvatar = true aquí automáticamente, porque la columna
+      // avatar en la tabla de Supabase tiene un DEFAULT por defecto en SQL.
+      // Solo es true si en su perfil guardado se confirmó explícitamente.
+      if (jugadorData.perfil && jugadorData.perfil.configuroAvatar === true) {
+        perfil.configuroAvatar = true;
+      }
     }
 
     // Si hay partida en Supabase, los datos del servidor mandan
@@ -224,12 +231,12 @@ export async function cargarPerfilServidor(cedula, token) {
       perfil.drenador = Boolean(partidaData.vencio_drenador);
       perfil.partidas = Math.max(perfil.partidas || 0, 1);
       perfil.yaJugo = true;
+      perfil.configuroAvatar = true;
       if (partidaData.dificultad) {
         perfil.difPref = partidaData.dificultad;
       }
-      if (partidaData.avatar && typeof partidaData.avatar === 'object' && !perfil.avatar) {
+      if (partidaData.avatar && typeof partidaData.avatar === 'object') {
         perfil.avatar = partidaData.avatar;
-        perfil.configuroAvatar = true;
       }
     } else {
       // SI NO HAY PARTIDA EN SUPABASE: los puntajes y victorias están en 0

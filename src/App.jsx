@@ -53,6 +53,7 @@ export default function App() {
 
   // Estado de fin de la aventura
   const [saveStatus, setSaveStatus] = useState('');
+  const [avatarFrom, setAvatarFrom] = useState('login'); // 'login' | 'perfil'
 
   // Cargar sesión inicial al montar
   useEffect(() => {
@@ -62,6 +63,7 @@ export default function App() {
       const p = cargarPerfil(s.cedula);
       setProfileState(p);
       if (!p.configuroAvatar) {
+        setAvatarFrom('login');
         setScreen('avatar');
       } else {
         setScreen('menu');
@@ -73,6 +75,7 @@ export default function App() {
           setProfileState(servidorPerfil);
           guardarPerfil(s.cedula, servidorPerfil);
           if (!servidorPerfil.configuroAvatar) {
+            setAvatarFrom('login');
             setScreen('avatar');
           }
         }
@@ -97,28 +100,24 @@ export default function App() {
     setSoundEnabled(nuevo);
   }, []);
 
-  // Login exitoso: si no ha configurado avatar, configurar primero
+  // Login exitoso: siempre pasar primero por el avatar para crear o confirmar antes de jugar
   const handleLoginSuccess = useCallback(async (ses) => {
     setSesion(ses);
     setSessionState(ses);
     const p = cargarPerfil(ses.cedula);
     setProfileState(p);
 
-    if (!p.configuroAvatar) {
-      setScreen('avatar');
-    } else {
-      setScreen('menu');
-    }
+    // Al iniciar sesión siempre mostramos la pantalla de avatar
+    setAvatarFrom('login');
+    setScreen('avatar');
 
-    // Sincronizar inmediatamente desde Supabase
-    const servidorPerfil = await cargarPerfilServidor(ses.cedula, ses.token);
-    if (servidorPerfil) {
-      setProfileState(servidorPerfil);
-      guardarPerfil(ses.cedula, servidorPerfil);
-      if (!servidorPerfil.configuroAvatar) {
-        setScreen('avatar');
+    // Sincronizar en segundo plano desde Supabase (si ya tenía avatar o historial guardado)
+    cargarPerfilServidor(ses.cedula, ses.token).then(servidorPerfil => {
+      if (servidorPerfil) {
+        setProfileState(servidorPerfil);
+        guardarPerfil(ses.cedula, servidorPerfil);
       }
-    }
+    }).catch(() => {});
   }, []);
 
   // Abrir perfil con recarga fresca desde la base de datos
@@ -178,6 +177,7 @@ export default function App() {
   const handlePlayFromMenu = useCallback(() => {
     if (!profile) return;
     if (!profile.configuroAvatar) {
+      setAvatarFrom('login');
       setScreen('avatar');
       return;
     }
@@ -487,21 +487,24 @@ export default function App() {
             profile={profile}
             onBackToMenu={() => setScreen('menu')}
             onProfileLoaded={updateProfile}
-            onEditAvatar={() => setScreen('avatar')}
+            onEditAvatar={() => {
+              setAvatarFrom('perfil');
+              setScreen('avatar');
+            }}
           />
         )}
 
         {screen === 'avatar' && (
           <AvatarScreen
             profile={profile}
-            esInicial={!profile?.configuroAvatar}
+            esInicial={avatarFrom === 'login'}
             onSaveAvatar={(nuevoAvatar) => {
               if (profile) {
                 updateProfile({ ...profile, avatar: nuevoAvatar, configuroAvatar: true });
               }
             }}
             onBack={() => {
-              setScreen(profile?.configuroAvatar ? 'perfil' : 'menu');
+              setScreen(avatarFrom === 'perfil' ? 'perfil' : 'menu');
             }}
             onLogout={handleLogout}
           />

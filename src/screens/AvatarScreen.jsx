@@ -19,8 +19,17 @@ export default function AvatarScreen({ profile, onSaveAvatar, onBack, esInicial 
   const [posturaPreview, setPosturaPreview] = useState('parado'); // 'parado' | 'canasta' | 'sentado' | 'sofa' | 'combate'
   const [animoPreview, setAnimoPreview] = useState('feliz'); // 'feliz' | 'normal' | 'cansado'
   const [guardadoMsg, setGuardadoMsg] = useState(false);
+  const [guardando, setGuardando] = useState(false);
 
   const canvasRef = useRef(null);
+  const haModificadoRef = useRef(false);
+
+  // Sincronizar si profile.avatar se descarga desde Supabase tras montar
+  useEffect(() => {
+    if (!haModificadoRef.current && profile?.avatar) {
+      setConfig(prev => ({ ...prev, ...profile.avatar }));
+    }
+  }, [profile?.avatar]);
 
   // Animación en vivo en el Canvas
   useEffect(() => {
@@ -64,6 +73,8 @@ export default function AvatarScreen({ profile, onSaveAvatar, onBack, esInicial 
   }, [config, posturaPreview, animoPreview]);
 
   const handleGuardar = () => {
+    if (guardando) return;
+    setGuardando(true);
     sfx.bien();
     setGuardadoMsg(true);
     onSaveAvatar(config);
@@ -277,7 +288,7 @@ export default function AvatarScreen({ profile, onSaveAvatar, onBack, esInicial 
 
       {/* Botones de Acción de la pantalla */}
       <div className="acciones" style={{ marginTop: '16px' }}>
-        <WoodButton color="t-verde" onClick={handleGuardar}>
+        <WoodButton color="t-verde" onClick={handleGuardar} disabled={guardando}>
           {esInicial ? 'GUARDAR Y EMPEZAR 🎮' : 'GUARDAR AVATAR'}
         </WoodButton>
         {esInicial ? (
