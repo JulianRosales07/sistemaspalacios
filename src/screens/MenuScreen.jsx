@@ -3,15 +3,19 @@ import WoodButton from '../components/WoodButton';
 import logoImg from '../assets/logo.webp';
 import { getSonido, toggleSonido, activarAudio, sfx } from '../game/audio';
 import { haJugado } from '../game/storage';
+import { esAdmin } from '../game/constants';
 
 export default function MenuScreen({
   session,
   profile,
+  disponibilidad,
   onPlay,
   onProfile,
   onDetails,
   onRanking,
   onLogout,
+  onAdmin,
+  onUnavailableModal,
   soundEnabled,
   onToggleSound
 }) {
@@ -23,6 +27,8 @@ export default function MenuScreen({
     : '';
 
   const yaJugo = haJugado(profile);
+  const admin = esAdmin(session?.cedula);
+  const juegoHabilitado = disponibilidad ? disponibilidad.disponible : true;
 
   const saludo = nombreCorto
     ? `Hola, ${nombreCorto}`
@@ -34,15 +40,68 @@ export default function MenuScreen({
     onToggleSound();
   };
 
+  const handlePlayClick = () => {
+    // Si no es admin y el juego no está disponible en las fechas configuradas
+    if (!admin && !juegoHabilitado) {
+      sfx.mal();
+      if (onUnavailableModal) onUnavailableModal();
+      return;
+    }
+    if (onPlay) onPlay();
+  };
+
+  // Texto y estilo del botón de juego
+  let textoBotonJugar = 'JUGAR';
+  let colorBotonJugar = 't-teal';
+  let tituloBotonJugar = 'Comenzar aventura';
+
+  if (yaJugo) {
+    textoBotonJugar = '🔒 JUGADO (1/1)';
+    colorBotonJugar = 't-gris';
+    tituloBotonJugar = 'Ya completaste tu única oportunidad';
+  } else if (!admin && !juegoHabilitado) {
+    colorBotonJugar = 't-gris';
+    if (disponibilidad?.motivo === 'antes') {
+      textoBotonJugar = '🔒 PRÓXIMAMENTE';
+      tituloBotonJugar = `Inicia el ${disponibilidad.inicioCorta}`;
+    } else {
+      textoBotonJugar = '🔒 FINALIZADO';
+      tituloBotonJugar = 'El evento ha finalizado';
+    }
+  }
+
   return (
     <>
       <section className="pantalla" id="p-menu">
         <div className="menu-cabecera-estado">
           <div className="saludo">{saludo}</div>
-          <div className={`badge-oportunidad ${yaJugo ? 'usada' : 'libre'}`}>
-            {yaJugo ? '🔒 Oportunidad completada (1/1)' : '⚡ 1 oportunidad disponible'}
+
+          <div className="menu-badges-grupo">
+            {admin && (
+              <button
+                type="button"
+                className="badge-admin-header"
+                onClick={onAdmin}
+                title="Configurar disponibilidad del evento"
+              >
+                👑 Admin • {juegoHabilitado ? '🟢 Abierto' : '🔴 Cerrado'}
+              </button>
+            )}
+
+            {!admin && !juegoHabilitado && (
+              <div className={`badge-disponibilidad ${disponibilidad?.motivo || 'cerrado'}`}>
+                {disponibilidad?.motivo === 'antes'
+                  ? `⏳ Inicia: ${disponibilidad.inicioCorta}`
+                  : '🏁 Finalizado'}
+              </div>
+            )}
+
+            <div className={`badge-oportunidad ${yaJugo ? 'usada' : 'libre'}`}>
+              {yaJugo ? '🔒 Oportunidad completada (1/1)' : '⚡ 1 oportunidad disponible'}
+            </div>
           </div>
         </div>
+
         <h1 className="titulo-juego">
           BATERÍA
           <br />
@@ -57,25 +116,40 @@ export default function MenuScreen({
 
         <nav className="letrero" aria-label="Menú principal">
           <div className="poste" aria-hidden="true" />
+
+          {/* Botón exclusivo para el administrador con cédula 1193051330 */}
+          {admin && (
+            <WoodButton
+              color="t-ambar"
+              rotation={-1.8}
+              onClick={onAdmin}
+              className="btn-admin-madera"
+              title="Panel de Administración y Disponibilidad"
+            >
+              ⚙️ PANEL ADMIN
+            </WoodButton>
+          )}
+
           <WoodButton
-            color={yaJugo ? 't-gris' : 't-teal'}
-            rotation={-1.5}
-            onClick={onPlay}
-            className={yaJugo ? 'btn-jugado' : ''}
-            title={yaJugo ? 'Ya completaste tu única oportunidad' : 'Comenzar aventura'}
+            color={colorBotonJugar}
+            rotation={admin ? 1.1 : -1.5}
+            onClick={handlePlayClick}
+            className={yaJugo || (!admin && !juegoHabilitado) ? 'btn-jugado' : ''}
+            title={tituloBotonJugar}
           >
-            {yaJugo ? '🔒 JUGADO (1/1)' : 'JUGAR'}
+            {textoBotonJugar}
           </WoodButton>
-          <WoodButton color="t-verde" rotation={1.2} onClick={onProfile}>
+
+          <WoodButton color="t-verde" rotation={admin ? -1.3 : 1.2} onClick={onProfile}>
             PERFIL
           </WoodButton>
-          <WoodButton color="t-naranja" rotation={-1} onClick={onDetails}>
+          <WoodButton color="t-naranja" rotation={admin ? 1.5 : -1} onClick={onDetails}>
             DETALLES
           </WoodButton>
-          <WoodButton color="t-morado" rotation={1.6} onClick={onRanking}>
+          <WoodButton color="t-morado" rotation={admin ? -1.1 : 1.6} onClick={onRanking}>
             RANKING
           </WoodButton>
-          <WoodButton color="t-rojo" rotation={-1.2} onClick={onLogout}>
+          <WoodButton color="t-rojo" rotation={admin ? 1.2 : -1.2} onClick={onLogout}>
             SALIR
           </WoodButton>
         </nav>

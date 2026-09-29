@@ -1,4 +1,4 @@
-import { CONFIG, DEPARTAMENTOS_OFICIALES } from './constants';
+import { CONFIG, DEPARTAMENTOS_OFICIALES, K_EVENTO } from './constants';
 import { getLocalRanking, perfilVacio } from './storage';
 
 function ruta(o, p) {
@@ -468,3 +468,274 @@ export async function obtenerDepartamentosAPI() {
   // Retornar lista oficial completa de dependencias de Sistemas Palacios
   return DEPARTAMENTOS_OFICIALES;
 }
+
+const EVENTO_DEFAULT = {
+  id: 1,
+  nombre: 'Semana SST 2026',
+  inicio: '2026-09-01T00:00:00-05:00',
+  fin: '2026-11-30T23:59:59-05:00',
+  max_partidas_dia: 1,
+  max_puntaje_base: 35000
+};
+
+export async function obtenerEvento(token) {
+  // Intentar cargar primero de Supabase
+  if (CONFIG.EVENTO_URL) {
+    try {
+      const url = CONFIG.EVENTO_URL + (CONFIG.EVENTO_URL.includes('?') ? '&' : '?') + 'id=eq.1&select=*';
+      const r = await fetch(url, { headers: cabecerasAPI(token) });
+      if (r.ok) {
+        const arr = await r.json();
+        if (Array.isArray(arr) && arr.length > 0) {
+          const ev = arr[0];
+          // Guardar en cache local
+          try {
+            localStorage.setItem(K_EVENTO, JSON.stringify(ev));
+          } catch (_) {}
+          return ev;
+        }
+      }
+    } catch (e) {
+      console.warn('Error al consultar evento en Supabase:', e);
+    }
+  }
+
+  // Fallback a localStorage
+  try {
+    const local = localStorage.getItem(K_EVENTO);
+    if (local) {
+      const evLocal = JSON.parse(local);
+      if (evLocal && evLocal.inicio && evLocal.fin) {
+        return evLocal;
+      }
+    }
+  } catch (_) {}
+
+  return EVENTO_DEFAULT;
+}
+
+export async function actualizarEvento(cambios, token) {
+  const payload = {
+    inicio: cambios.inicio,
+    fin: cambios.fin
+  };
+  if (cambios.nombre) payload.nombre = cambios.nombre;
+
+  // Actualizar inmediatamente en cache local para feedback instantáneo
+  try {
+    const actual = await obtenerEvento(token);
+    const nuevoLocal = { ...actual, ...payload };
+    localStorage.setItem(K_EVENTO, JSON.stringify(nuevoLocal));
+  } catch (_) {}
+
+  if (!CONFIG.EVENTO_URL) {
+    return { ok: true, data: payload, origen: 'local' };
+  }
+
+  try {
+    const url = CONFIG.EVENTO_URL + (CONFIG.EVENTO_URL.includes('?') ? '&' : '?') + 'id=eq.1';
+    const hdrs = Object.assign({}, cabecerasAPI(token), {
+      'Prefer': 'return=representation'
+    });
+
+    const r = await fetch(url, {
+      method: 'PATCH',
+      headers: hdrs,
+      body: JSON.stringify(payload)
+    });
+
+    if (r.ok) {
+      const resData = await r.json().catch(() => []);
+      if (Array.isArray(resData) && resData.length > 0) {
+        return { ok: true, data: resData[0], origen: 'supabase' };
+      } else {
+        // HTTP 200 pero array vacío => RLS bloqueó el UPDATE en Supabase
+        return {
+          ok: true,
+          data: payload,
+          origen: 'local_rls_bloqueado',
+          rlsBloqueado: true,
+          msg: 'Guardado localmente. Para sincronizar a todos los colaboradores en Supabase, ejecuta el comando SQL de actualización.'
+        };
+      }
+    } else {
+      const errTxt = await r.text().catch(() => '');
+      return {
+        ok: false,
+        msg: `Error ${r.status} al guardar en Supabase: ${errTxt}`
+      };
+    }
+  } catch (err) {
+    return {
+      ok: true,
+      data: payload,
+      origen: 'local_offline',
+      msg: 'Guardado en este equipo. No se pudo conectar con Supabase en este momento.'
+    };
+  }
+}
+
+export function formatearFechaLarga(fechaStr) {
+  if (!fechaStr) return '';
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return fechaStr;
+
+  return d.toLocaleString('es-CO', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+}
+
+export function formatearFechaCorta(fechaStr) {
+  if (!fechaStr) return '';
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return fechaStr;
+
+  return d.toLocaleString('es-CO', {
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  });
+}
+
+export function tiempoDiferenciaTexto(ms) {
+  if (ms <= 0) return '0 min';
+  const segs = Math.floor(ms / 1000);
+  const mins = Math.floor(segs / 60);
+  const horas = Math.floor(mins / 60);
+  const dias = Math.floor(horas / 24);
+
+  if (dias > 0) {
+    const remHoras = horas % 24;
+    return `${dias} ${dias === 1 ? 'día' : 'días'}${remHoras > 0 ? ` y ${remHoras} h` : ''}`;
+  }
+  if (horas > 0) {
+    const remMins = mins % 60;
+    return `${horas} h${remMins > 0 ? ` ${remMins} min` : ''}`;
+  }
+  return `${Math.max(1, mins)} min`;
+}
+
+export function verificarDisponibilidad(evento) {
+  if (!evento || !evento.inicio || !evento.fin) {
+    return {
+      disponible: true,
+      motivo: 'activo',
+      inicioFormateado: '',
+      finFormateado: '',
+      inicioCorta: '',
+      finCorta: '',
+      tiempoRestante: '',
+      tiempoParaInicio: ''
+    };
+  }
+
+  const ahora = new Date();
+  const dInicio = new Date(evento.inicio);
+  const dFin = new Date(evento.fin);
+
+  const inicioFormateado = formatearFechaLarga(evento.inicio);
+  const finFormateado = formatearFechaLarga(evento.fin);
+  const inicioCorta = formatearFechaCorta(evento.inicio);
+  const finCorta = formatearFechaCorta(evento.fin);
+
+  if (ahora < dInicio) {
+    const msFaltan = dInicio.getTime() - ahora.getTime();
+    return {
+      disponible: false,
+      motivo: 'antes',
+      inicioDate: dInicio,
+      finDate: dFin,
+      inicioFormateado,
+      finFormateado,
+      inicioCorta,
+      finCorta,
+      tiempoParaInicio: tiempoDiferenciaTexto(msFaltan),
+      tiempoRestante: ''
+    };
+  }
+
+  if (ahora > dFin) {
+    return {
+      disponible: false,
+      motivo: 'despues',
+      inicioDate: dInicio,
+      finDate: dFin,
+      inicioFormateado,
+      finFormateado,
+      inicioCorta,
+      finCorta,
+      tiempoParaInicio: '',
+      tiempoRestante: 'Finalizado'
+    };
+  }
+
+  const msRestantes = dFin.getTime() - ahora.getTime();
+  return {
+    disponible: true,
+    motivo: 'activo',
+    inicioDate: dInicio,
+    finDate: dFin,
+    inicioFormateado,
+    finFormateado,
+    inicioCorta,
+    finCorta,
+    tiempoParaInicio: '',
+    tiempoRestante: tiempoDiferenciaTexto(msRestantes)
+  };
+}
+
+export async function obtenerMetricasAdmin(token) {
+  const result = {
+    totalJugadores: 0,
+    totalPartidas: 0,
+    mejorPuntaje: 0,
+    mejorJugador: null
+  };
+
+  if (!CONFIG.RESULTADOS_URL) return result;
+
+  try {
+    const urlJugadores = CONFIG.RESULTADOS_URL.replace(/\/partida\b/, '/jugador') + '?select=id';
+    const urlPartidas = CONFIG.RESULTADOS_URL + '?select=puntaje,nombre,area,dificultad&order=puntaje.desc&limit=1';
+    const urlTotalPartidas = CONFIG.RESULTADOS_URL + '?select=id';
+
+    const hdrs = cabecerasAPI(token);
+
+    const [resJugs, resParts, resTop] = await Promise.all([
+      fetch(urlJugadores, { headers: hdrs }).catch(() => null),
+      fetch(urlTotalPartidas, { headers: hdrs }).catch(() => null),
+      fetch(urlPartidas, { headers: hdrs }).catch(() => null)
+    ]);
+
+    if (resJugs && resJugs.ok) {
+      const arr = await resJugs.json().catch(() => []);
+      if (Array.isArray(arr)) result.totalJugadores = arr.length;
+    }
+
+    if (resParts && resParts.ok) {
+      const arr = await resParts.json().catch(() => []);
+      if (Array.isArray(arr)) result.totalPartidas = arr.length;
+    }
+
+    if (resTop && resTop.ok) {
+      const arr = await resTop.json().catch(() => []);
+      if (Array.isArray(arr) && arr.length > 0) {
+        result.mejorPuntaje = arr[0].puntaje || 0;
+        result.mejorJugador = arr[0];
+      }
+    }
+  } catch (err) {
+    console.warn('Error al cargar métricas de admin:', err);
+  }
+
+  return result;
+}
+

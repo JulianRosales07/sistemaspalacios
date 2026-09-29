@@ -13,6 +13,7 @@ export const CONFIG = {
   ESTADO_VALIDO: 'ACTIVO',
   CAMPO_TOKEN: '',
   RESULTADOS_URL: 'https://usxypuoclgypnlfehllo.supabase.co/rest/v1/partida',
+  EVENTO_URL: 'https://usxypuoclgypnlfehllo.supabase.co/rest/v1/evento',
   RANKING_URL: 'https://usxypuoclgypnlfehllo.supabase.co/rest/v1/ranking?select=*',
   RANKING_FALLBACK_URL: 'https://usxypuoclgypnlfehllo.supabase.co/rest/v1/ranking_publico?select=*',
   RANKING_AREAS_URL: 'https://usxypuoclgypnlfehllo.supabase.co/rest/v1/ranking_areas?select=*',
@@ -21,6 +22,14 @@ export const CONFIG = {
     'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVzeHlwdW9jbGd5cG5sZmVobGxvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNTIyODYsImV4cCI6MjEwNTkyODI4Nn0.zjxq4EdlVYGJghJtZ6s5LLINlQ-D_r6eJYItNA_z2sw'
   }
 };
+
+export const ADMIN_CEDULAS = ['1193051330'];
+
+export function esAdmin(cedula) {
+  if (!cedula) return false;
+  const limpia = String(cedula).replace(/\D/g, '').trim();
+  return ADMIN_CEDULAS.includes(limpia);
+}
 
 export const DEPARTAMENTOS_OFICIALES = [
   'ADMINISTRATIVO Y FINANCIERO',
@@ -92,6 +101,7 @@ export const K_SES = 'b100_sesion';
 export const K_PERF = 'b100_perfil_';
 export const K_RANK = 'b100_ranking';
 export const K_SONIDO = 'b100_sonido';
+export const K_EVENTO = 'b100_evento_config';
 
 export const P = {
   fondo: '#221B47',

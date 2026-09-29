@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import BackgroundScene from './components/BackgroundScene';
 import StoryModal from './components/StoryModal';
 import AlreadyPlayedModal from './components/AlreadyPlayedModal';
+import UnavailableModal from './components/UnavailableModal';
 import LoginScreen from './screens/LoginScreen';
 import MenuScreen from './screens/MenuScreen';
 import MapScreen from './screens/MapScreen';
@@ -13,13 +14,15 @@ import ProfileScreen from './screens/ProfileScreen';
 import RankingScreen from './screens/RankingScreen';
 import DetailsScreen from './screens/DetailsScreen';
 import AvatarScreen from './screens/AvatarScreen';
+import AdminScreen from './screens/AdminScreen';
 
 import {
   HIST_INTRO,
   HIST_VICTORIA,
   HIST_ESCAPO,
   CAPS_META,
-  DIFS
+  DIFS,
+  esAdmin
 } from './game/constants';
 import {
   getSesion,
@@ -31,15 +34,23 @@ import {
   guardarLocalRanking,
   haJugado
 } from './game/storage';
-import { guardarPartida, cargarPerfilServidor, sincronizarPerfilServidor } from './game/api';
+import {
+  guardarPartida,
+  cargarPerfilServidor,
+  sincronizarPerfilServidor,
+  obtenerEvento,
+  verificarDisponibilidad
+} from './game/api';
 import { getSonido, toggleSonido, sfx } from './game/audio';
 
 export default function App() {
   const [screen, setScreen] = useState('login');
   const [session, setSessionState] = useState(null);
   const [profile, setProfileState] = useState(null);
+  const [evento, setEvento] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(getSonido());
   const [showAlreadyPlayedModal, setShowAlreadyPlayedModal] = useState(false);
+  const [showUnavailableModal, setShowUnavailableModal] = useState(false);
 
   // Estado para la pantalla de historia (viñetas de diálogo)
   const [storyConfig, setStoryConfig] = useState(null);
@@ -57,6 +68,11 @@ export default function App() {
 
   // Cargar sesión inicial al montar
   useEffect(() => {
+    // Cargar configuración de disponibilidad del evento
+    obtenerEvento().then(ev => {
+      if (ev) setEvento(ev);
+    }).catch(() => {});
+
     const s = getSesion();
     if (s && s.cedula) {
       setSessionState(s);
@@ -107,6 +123,11 @@ export default function App() {
     const p = cargarPerfil(ses.cedula);
     setProfileState(p);
 
+    // Cargar evento actualizado
+    obtenerEvento(ses.token).then(ev => {
+      if (ev) setEvento(ev);
+    }).catch(() => {});
+
     // Al iniciar sesión siempre mostramos la pantalla de avatar
     setAvatarFrom('login');
     setScreen('avatar');
@@ -140,12 +161,25 @@ export default function App() {
     setScreen('login');
   }, []);
 
-  // Proteger pantallas de juego: si ya jugó, volver siempre al menú
+  // Proteger pantallas de juego y de administración
   useEffect(() => {
-    if (haJugado(profile) && (screen === 'mapa' || screen === 'juego' || screen === 'intro')) {
+    const esAdminUser = esAdmin(session?.cedula);
+    const disp = verificarDisponibilidad(evento);
+    const pantallasJuego = screen === 'mapa' || screen === 'juego' || screen === 'intro';
+
+    if (pantallasJuego) {
+      if (haJugado(profile)) {
+        setScreen('menu');
+      } else if (!esAdminUser && !disp.disponible) {
+        setScreen('menu');
+        setShowUnavailableModal(true);
+      }
+    }
+
+    if (screen === 'admin' && !esAdminUser) {
       setScreen('menu');
     }
-  }, [screen, profile]);
+  }, [screen, profile, evento, session?.cedula]);
 
   // Asegurar siempre que al cambiar de pantalla se muestre desde el inicio (arriba)
   useEffect(() => {
@@ -181,6 +215,15 @@ export default function App() {
       setScreen('avatar');
       return;
     }
+
+    const esAdminUser = esAdmin(session?.cedula);
+    const disp = verificarDisponibilidad(evento);
+    if (!esAdminUser && !disp.disponible) {
+      setShowUnavailableModal(true);
+      sfx.mal();
+      return;
+    }
+
     if (haJugado(profile)) {
       setShowAlreadyPlayedModal(true);
       sfx.mal();
@@ -199,7 +242,7 @@ export default function App() {
     } else {
       setScreen('mapa');
     }
-  }, [profile, showStory, updateProfile]);
+  }, [profile, showStory, updateProfile, evento, session?.cedula]);
 
   // Cambiar dificultad en el mapa
   const handleSelectDifficulty = useCallback((difKey) => {
@@ -409,11 +452,14 @@ export default function App() {
           <MenuScreen
             session={session}
             profile={profile}
+            disponibilidad={verificarDisponibilidad(evento)}
             onPlay={handlePlayFromMenu}
             onProfile={handleOpenProfile}
             onDetails={() => setScreen('detalles')}
             onRanking={() => setScreen('ranking')}
             onLogout={handleLogout}
+            onAdmin={() => setScreen('admin')}
+            onUnavailableModal={() => setShowUnavailableModal(true)}
             soundEnabled={soundEnabled}
             onToggleSound={handleToggleSound}
           />
@@ -521,11 +567,38 @@ export default function App() {
           <DetailsScreen onBackToMenu={() => setScreen('menu')} />
         )}
 
+        {screen === 'admin' && (
+          <AdminScreen
+            session={session}
+            onBackToMenu={() => setScreen('menu')}
+            onPlayTest={() => {
+              if (!profile?.configuroAvatar) {
+                setAvatarFrom('login');
+                setScreen('avatar');
+              } else {
+                setScreen('mapa');
+              }
+            }}
+            onViewRanking={() => setScreen('ranking')}
+            onEventoUpdated={(nuevo) => setEvento(nuevo)}
+          />
+        )}
+
         {showAlreadyPlayedModal && (
           <AlreadyPlayedModal
             session={session}
             profile={profile}
             onClose={() => setShowAlreadyPlayedModal(false)}
+            onGoRanking={() => setScreen('ranking')}
+            onGoProfile={handleOpenProfile}
+          />
+        )}
+
+        {showUnavailableModal && (
+          <UnavailableModal
+            disponibilidad={verificarDisponibilidad(evento)}
+            session={session}
+            onClose={() => setShowUnavailableModal(false)}
             onGoRanking={() => setScreen('ranking')}
             onGoProfile={handleOpenProfile}
           />
