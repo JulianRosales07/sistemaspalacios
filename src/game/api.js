@@ -308,6 +308,17 @@ export async function guardarPartida(payload, token) {
   }
 
   try {
+    // 0. Validar que el juego esté abierto y disponible en las fechas configuradas
+    const ev = await obtenerEvento(token);
+    const disp = verificarDisponibilidad(ev);
+    if (!disp.disponible) {
+      return {
+        ok: false,
+        cerrado: true,
+        msg: 'El juego se encuentra actualmente cerrado. No se pueden registrar más partidas en este momento.'
+      };
+    }
+
     // 1. Verificar si ya existe una partida para esta cédula (solo 1 oportunidad por jugador)
     const checkUrl =
       CONFIG.RESULTADOS_URL +
@@ -353,7 +364,9 @@ export async function guardarPartida(payload, token) {
       const errTxt = await r.text().catch(() => '');
       console.warn('Error al guardar en Supabase:', r.status, errTxt);
       let msg = 'No se pudo sincronizar con el ranking general. Quedó guardado en este equipo.';
-      if (errTxt.includes('oportunidad_agotada') || errTxt.includes('partida_cedula_key') || errTxt.includes('duplicate key')) {
+      if (errTxt.includes('evento_cerrado')) {
+        msg = 'El evento se encuentra actualmente cerrado. No se pueden registrar partidas.';
+      } else if (errTxt.includes('oportunidad_agotada') || errTxt.includes('partida_cedula_key') || errTxt.includes('duplicate key')) {
         msg = 'Ya registraste tu única oportunidad en el evento. No se permiten más intentos.';
       } else if (errTxt.includes('puntaje_invalido')) {
         msg = 'El puntaje supera el límite máximo configurado en Supabase (evento.max_puntaje_base).';
@@ -623,18 +636,16 @@ export function tiempoDiferenciaTexto(ms) {
   return `${Math.max(1, mins)} min`;
 }
 
-export function verificarDisponibilidad(evento) {
+export function verificarDisponibilidad(ev) {
+  let evento = ev;
   if (!evento || !evento.inicio || !evento.fin) {
-    return {
-      disponible: true,
-      motivo: 'activo',
-      inicioFormateado: '',
-      finFormateado: '',
-      inicioCorta: '',
-      finCorta: '',
-      tiempoRestante: '',
-      tiempoParaInicio: ''
-    };
+    try {
+      const local = typeof localStorage !== 'undefined' ? localStorage.getItem(K_EVENTO) : null;
+      if (local) evento = JSON.parse(local);
+    } catch (_) {}
+  }
+  if (!evento || !evento.inicio || !evento.fin) {
+    evento = EVENTO_DEFAULT;
   }
 
   const ahora = new Date();

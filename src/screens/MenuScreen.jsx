@@ -41,8 +41,8 @@ export default function MenuScreen({
   };
 
   const handlePlayClick = () => {
-    // Si no es admin y el juego no está disponible en las fechas configuradas
-    if (!admin && !juegoHabilitado) {
+    // Si el juego está cerrado, no se debe dejar jugar bajo ninguna circunstancia desde el menú
+    if (!juegoHabilitado) {
       sfx.mal();
       if (onUnavailableModal) onUnavailableModal();
       return;
@@ -59,14 +59,14 @@ export default function MenuScreen({
     textoBotonJugar = '🔒 JUGADO (1/1)';
     colorBotonJugar = 't-gris';
     tituloBotonJugar = 'Ya completaste tu única oportunidad';
-  } else if (!admin && !juegoHabilitado) {
+  } else if (!juegoHabilitado) {
     colorBotonJugar = 't-gris';
     if (disponibilidad?.motivo === 'antes') {
       textoBotonJugar = '🔒 PRÓXIMAMENTE';
-      tituloBotonJugar = `Inicia el ${disponibilidad.inicioCorta}`;
+      tituloBotonJugar = `El juego está cerrado. Inicia el ${disponibilidad.inicioCorta}`;
     } else {
-      textoBotonJugar = '🔒 FINALIZADO';
-      tituloBotonJugar = 'El evento ha finalizado';
+      textoBotonJugar = '🔒 EVENTO CERRADO';
+      tituloBotonJugar = 'El juego se encuentra actualmente cerrado';
     }
   }
 
@@ -88,11 +88,11 @@ export default function MenuScreen({
               </button>
             )}
 
-            {!admin && !juegoHabilitado && (
+            {!juegoHabilitado && (
               <div className={`badge-disponibilidad ${disponibilidad?.motivo || 'cerrado'}`}>
                 {disponibilidad?.motivo === 'antes'
                   ? `⏳ Inicia: ${disponibilidad.inicioCorta}`
-                  : '🏁 Finalizado'}
+                  : '🏁 Evento Cerrado'}
               </div>
             )}
 
@@ -134,7 +134,7 @@ export default function MenuScreen({
             color={colorBotonJugar}
             rotation={admin ? 1.1 : -1.5}
             onClick={handlePlayClick}
-            className={yaJugo || (!admin && !juegoHabilitado) ? 'btn-jugado' : ''}
+            className={yaJugo || !juegoHabilitado ? 'btn-jugado' : ''}
             title={tituloBotonJugar}
           >
             {textoBotonJugar}

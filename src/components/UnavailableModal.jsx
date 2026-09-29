@@ -5,12 +5,20 @@ import { sfx } from '../game/audio';
 export default function UnavailableModal({
   disponibilidad,
   session,
+  esAdmin = false,
+  onAdmin,
   onClose,
   onGoRanking,
   onGoProfile
 }) {
   const nombre = session?.nombre ? session.nombre.split(' ')[0] : 'Colaborador';
   const esAntes = disponibilidad?.motivo === 'antes';
+
+  const handleAdmin = () => {
+    sfx.clic();
+    onClose();
+    if (onAdmin) onAdmin();
+  };
 
   const handleRanking = () => {
     sfx.clic();
@@ -111,6 +119,11 @@ export default function UnavailableModal({
         </p>
 
         <div className="acciones" style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+          {esAdmin && (
+            <WoodButton color="t-ambar" chica onClick={handleAdmin}>
+              ⚙️ Abrir Panel Admin para Habilitar
+            </WoodButton>
+          )}
           <WoodButton color="t-morado" chica onClick={handleRanking}>
             Ver Ranking General
           </WoodButton>

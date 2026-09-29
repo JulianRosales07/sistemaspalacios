@@ -51,6 +51,7 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState(getSonido());
   const [showAlreadyPlayedModal, setShowAlreadyPlayedModal] = useState(false);
   const [showUnavailableModal, setShowUnavailableModal] = useState(false);
+  const [adminTestMode, setAdminTestMode] = useState(false);
 
   // Estado para la pantalla de historia (viñetas de diálogo)
   const [storyConfig, setStoryConfig] = useState(null);
@@ -158,10 +159,11 @@ export default function App() {
     setSesion(null);
     setSessionState(null);
     setProfileState(null);
+    setAdminTestMode(false);
     setScreen('login');
   }, []);
 
-  // Proteger pantallas de juego y de administración
+  // Proteger pantallas de juego y de administración: si está cerrado, no debe dejar jugar
   useEffect(() => {
     const esAdminUser = esAdmin(session?.cedula);
     const disp = verificarDisponibilidad(evento);
@@ -170,7 +172,7 @@ export default function App() {
     if (pantallasJuego) {
       if (haJugado(profile)) {
         setScreen('menu');
-      } else if (!esAdminUser && !disp.disponible) {
+      } else if (!disp.disponible && !adminTestMode) {
         setScreen('menu');
         setShowUnavailableModal(true);
       }
@@ -179,7 +181,7 @@ export default function App() {
     if (screen === 'admin' && !esAdminUser) {
       setScreen('menu');
     }
-  }, [screen, profile, evento, session?.cedula]);
+  }, [screen, profile, evento, session?.cedula, adminTestMode]);
 
   // Asegurar siempre que al cambiar de pantalla se muestre desde el inicio (arriba)
   useEffect(() => {
@@ -207,7 +209,7 @@ export default function App() {
     setScreen('historia');
   }, []);
 
-  // Menú -> Jugar (solo 1 oportunidad)
+  // Menú -> Jugar (estrictamente bloqueado si el juego está cerrado)
   const handlePlayFromMenu = useCallback(() => {
     if (!profile) return;
     if (!profile.configuroAvatar) {
@@ -216,9 +218,9 @@ export default function App() {
       return;
     }
 
-    const esAdminUser = esAdmin(session?.cedula);
+    // Validación estricta: cuando esté cerrado no debe dejar jugar
     const disp = verificarDisponibilidad(evento);
-    if (!esAdminUser && !disp.disponible) {
+    if (!disp.disponible) {
       setShowUnavailableModal(true);
       sfx.mal();
       return;
@@ -598,6 +600,11 @@ export default function App() {
           <UnavailableModal
             disponibilidad={verificarDisponibilidad(evento)}
             session={session}
+            esAdmin={esAdmin(session?.cedula)}
+            onAdmin={() => {
+              setShowUnavailableModal(false);
+              setScreen('admin');
+            }}
             onClose={() => setShowUnavailableModal(false)}
             onGoRanking={() => setScreen('ranking')}
             onGoProfile={handleOpenProfile}
