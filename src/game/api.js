@@ -1,5 +1,5 @@
-import { CONFIG, DEPARTAMENTOS_OFICIALES, K_EVENTO } from './constants';
-import { getLocalRanking, perfilVacio } from './storage';
+import { CONFIG, DEPARTAMENTOS_OFICIALES, K_EVENTO } from './constants.js';
+import { getLocalRanking, perfilVacio } from './storage.js';
 
 function ruta(o, p) {
   if (!p) return undefined;

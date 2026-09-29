@@ -1,5 +1,5 @@
-import { K_SES, K_PERF, K_RANK, INSIGNIAS } from './constants';
-import { avatarPorDefecto } from './pixelAvatar';
+import { K_SES, K_PERF, K_RANK, INSIGNIAS } from './constants.js';
+import { avatarPorDefecto } from './pixelAvatar.js';
 
 export function ls(key, defaultValue) {
   try {
