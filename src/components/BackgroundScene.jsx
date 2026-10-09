@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import bgLogin from '../assets/Oficina Cibernética sobre un Abismo de Neón.png';
 
 export default function BackgroundScene({ isLogin, hasOverlay }) {
   // Generar las estrellas de fondo una sola vez
@@ -103,7 +104,12 @@ export default function BackgroundScene({ isLogin, hasOverlay }) {
   if (isLogin) {
     return (
       <div className="capa-fondo" id="fondo-login">
-        <div className="franja" />
+        <img
+          src={bgLogin}
+          alt="Oficina Cibernética sobre un Abismo de Neón"
+          className="fondo-login-img"
+        />
+        <div className="fondo-login-overlay" />
       </div>
     );
   }
