@@ -32,7 +32,9 @@ import {
   getRunActual,
   getInsigniasGanadas,
   guardarLocalRanking,
-  haJugado
+  haJugado,
+  puedeJugar,
+  intentosDisponibles
 } from './game/storage';
 import {
   guardarPartida,
@@ -170,7 +172,7 @@ export default function App() {
     const pantallasJuego = screen === 'mapa' || screen === 'juego' || screen === 'intro';
 
     if (pantallasJuego) {
-      if (haJugado(profile)) {
+      if (!puedeJugar(profile)) {
         setScreen('menu');
       } else if (!disp.disponible && !adminTestMode) {
         setScreen('menu');
@@ -226,7 +228,7 @@ export default function App() {
       return;
     }
 
-    if (haJugado(profile)) {
+    if (!puedeJugar(profile)) {
       setShowAlreadyPlayedModal(true);
       sfx.mal();
       return;
@@ -284,6 +286,16 @@ export default function App() {
     setScreen('juego');
   }, []);
 
+  // Iniciar segundo intento directamente
+  const handlePlaySecondAttempt = useCallback(() => {
+    sfx.clic();
+    if (!profile) return;
+    const freshProfile = { ...profile, run: null };
+    updateProfile(freshProfile);
+    setSelectedChapter(0);
+    setScreen('mapa');
+  }, [profile, updateProfile]);
+
   // Fin de la aventura completa (tras el capítulo 4)
   const finishAdventure = useCallback(async (finalRun) => {
     const ac = finalRun.resultados.reduce((a, r) => a + (r.aciertos || 0), 0);
@@ -293,7 +305,7 @@ export default function App() {
     setScreen('fin');
     setSaveStatus('Registrando tu puntaje en la base de datos…');
 
-    // Registrar en Supabase
+    // Registrar en Backend
     const payload = {
       cedula: session.cedula,
       nombre: session.nombre,
@@ -307,30 +319,54 @@ export default function App() {
     };
 
     const res = await guardarPartida(payload, session.token);
-    setSaveStatus(res.msg);
+    setSaveStatus(res.msg || (res.ok ? 'Puntaje registrado exitosamente.' : 'No se pudo registrar el puntaje.'));
 
-    // Actualizar perfil local y sincronizar con base de datos
-    const nuevoMejor = res.ok ? Math.max(profile?.mejor || 0, finalRun.puntos) : (profile?.mejor || 0);
+    const esIntento1 = res.attempt === 1;
+    const esIntento2 = res.attempt === 2;
+    const intentosUsados = res.attemptsUsed ?? (esIntento1 ? 1 : 2);
+    const intentosRestantes = res.attemptsRemaining ?? (2 - intentosUsados);
+    const yaJugoFinal = intentosUsados >= 2;
+
+    // REGLA: El rankingScore es EXCLUSIVAMENTE del intento 2 (NUNCA MAX).
+    const nuevoRankingScore = esIntento2 ? finalRun.puntos : (profile?.rankingScore ?? null);
+
     const updated = {
       ...profile,
-      partidas: 1,
-      yaJugo: true,
-      mejor: nuevoMejor,
+      partidas: intentosUsados,
+      intentosUsados,
+      intentosRestantes,
+      primerIntentoPuntaje: esIntento1 ? finalRun.puntos : (profile?.primerIntentoPuntaje ?? null),
+      segundoIntentoPuntaje: esIntento2 ? finalRun.puntos : (profile?.segundoIntentoPuntaje ?? null),
+      rankingScore: nuevoRankingScore,
+      mejor: nuevoRankingScore || 0,
+      yaJugo: yaJugoFinal,
       capMax: 4,
       drenador: finalRun.victoria || profile?.drenador,
+      ultimoIntento: {
+        attempt: res.attempt || (esIntento1 ? 1 : 2),
+        score: finalRun.puntos,
+        countsForRanking: Boolean(res.countsForRanking),
+        attemptsUsed,
+        attemptsRemaining: intentosRestantes,
+        firstAttemptScore: esIntento1 ? finalRun.puntos : (profile?.primerIntentoPuntaje ?? null),
+        secondAttemptScore: esIntento2 ? finalRun.puntos : null,
+        rankingScore: nuevoRankingScore
+      },
       run: null
     };
     updateProfile(updated);
 
-    // Guardar en ranking local para fallback offline
-    const dRun = DIFS[finalRun.dif] || DIFS.media;
-    guardarLocalRanking({
-      cedula: session.cedula,
-      nombre: session.nombre,
-      area: session.area || '',
-      puntos: nuevoMejor,
-      dificultad: dRun.nombre
-    });
+    // Guardar en ranking local para fallback offline ÚNICAMENTE si es el Intento 2
+    if (esIntento2) {
+      const dRun = DIFS[finalRun.dif] || DIFS.media;
+      guardarLocalRanking({
+        cedula: session.cedula,
+        nombre: session.nombre,
+        area: session.area || '',
+        puntos: finalRun.puntos, // NUNCA MAX, puntaje exclusivo del 2do intento
+        dificultad: dRun.nombre
+      });
+    }
 
     // Sincronizar contadores e insignias con la tabla jugador en Supabase
     sincronizarPerfilServidor(session.cedula, updated, session.token);
@@ -524,8 +560,13 @@ export default function App() {
         {screen === 'fin' && (
           <EndScreen
             run={summaryData?.run || currentRun}
+            profile={profile}
+            session={session}
             saveStatus={saveStatus}
+            intentoInfo={profile?.ultimoIntento}
             onBackToMenu={() => setScreen('menu')}
+            onPlaySecondAttempt={handlePlaySecondAttempt}
+            onGoRanking={() => setScreen('ranking')}
           />
         )}
 

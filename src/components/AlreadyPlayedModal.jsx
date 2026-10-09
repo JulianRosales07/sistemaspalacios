@@ -30,7 +30,7 @@ export default function AlreadyPlayedModal({ session, profile, onClose, onGoRank
     <div className="capa" id="capa-ya-jugo" role="dialog" aria-modal="true" aria-labelledby="ya-jugo-titulo">
       <div className="panel modal-ya-jugo">
         <div className="tabla panel-cab t-morado" id="ya-jugo-titulo">
-          ⚡ Oportunidad completada
+          ⚡ 2 Intentos completados
         </div>
 
         <div style={{ fontSize: '48px', margin: '8px 0 2px 0' }} aria-hidden="true">
@@ -42,7 +42,7 @@ export default function AlreadyPlayedModal({ session, profile, onClose, onGoRank
         </h2>
 
         <p style={{ margin: '0 0 14px 0', fontSize: '0.96rem', lineHeight: '1.4' }}>
-          Para asegurar la equidad y transparencia de la <b>Semana SST</b>, cada colaborador cuenta con <b>una sola oportunidad</b> para jugar y registrar su récord.
+          Para asegurar la equidad y transparencia de la <b>Semana SST</b>, cada colaborador cuenta con <b>un máximo de 2 intentos</b>. Has utilizado tus <b>2 intentos disponibles</b>.
         </p>
 
         <div
@@ -56,18 +56,23 @@ export default function AlreadyPlayedModal({ session, profile, onClose, onGoRank
           }}
         >
           <span style={{ fontSize: '0.85rem', color: 'var(--crema-suave)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Tu puntaje registrado
+            Puntaje Oficial en Ranking (Intento 2)
           </span>
           <div style={{ fontSize: '2rem', fontWeight: '900', color: 'var(--ambar)', lineHeight: '1.1', margin: '4px 0' }}>
             {num(puntos)}
           </div>
+          {profile?.primerIntentoPuntaje !== null && profile?.primerIntentoPuntaje !== undefined && (
+            <div style={{ fontSize: '0.82rem', color: 'var(--crema-suave)', margin: '4px 0' }}>
+              Intento 1: <b>{num(profile.primerIntentoPuntaje)}</b> (Historial) • Intento 2: <b>{num(puntos)}</b> (Oficial)
+            </div>
+          )}
           <span style={{ fontSize: '0.85rem', color: 'var(--crema-suave)' }}>
             Nivel: {dif.nombre} • {profile?.drenador ? '⚡ Venció al Drenador' : 'Aventura terminada'}
           </span>
         </div>
 
         <p style={{ margin: '0 0 16px 0', fontSize: '0.88rem', color: 'var(--crema-suave)' }}>
-          ¡Revisa tu posición actual en la tabla general de líderes o tus logros en el perfil!
+          ¡Revisa tu posición oficial en el ranking general o tus insignias en el perfil!
         </p>
 
         <div className="acciones" style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>

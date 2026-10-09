@@ -37,6 +37,11 @@ export function setSesion(ses) {
 export function perfilVacio() {
   return {
     partidas: 0,
+    intentosUsados: 0,
+    intentosRestantes: 2,
+    primerIntentoPuntaje: null,
+    segundoIntentoPuntaje: null,
+    rankingScore: null,
     yaJugo: false,
     mejor: 0,
     capMax: 0,
@@ -47,13 +52,27 @@ export function perfilVacio() {
     cont: { no: 0, interv: 0, cortes: 0, trampas: 0, pausas: 0 },
     run: null,
     avatar: avatarPorDefecto(),
-    configuroAvatar: false
+    configuroAvatar: false,
+    ultimoIntento: null
   };
+}
+
+export function puedeJugar(perfil) {
+  if (!perfil) return false;
+  const usados = Number(perfil.intentosUsados ?? (perfil.yaJugo ? 2 : perfil.partidas ?? 0));
+  return usados < 2;
 }
 
 export function haJugado(perfil) {
   if (!perfil) return false;
-  return Boolean(perfil.yaJugo || (Number(perfil.partidas) > 0));
+  const usados = Number(perfil.intentosUsados ?? (perfil.yaJugo ? 2 : 0));
+  return Boolean(usados >= 2 || (perfil.yaJugo && perfil.intentosUsados === undefined));
+}
+
+export function intentosDisponibles(perfil) {
+  if (!perfil) return 2;
+  const usados = Number(perfil.intentosUsados ?? (perfil.yaJugo ? 2 : 0));
+  return Math.max(0, 2 - usados);
 }
 
 export function cargarPerfil(cedula) {
@@ -65,8 +84,14 @@ export function cargarPerfil(cedula) {
   merged.tutos = guardado.tutos || {};
   if (!merged.avatar) merged.avatar = avatarPorDefecto();
   if (merged.configuroAvatar === undefined) {
-    merged.configuroAvatar = Boolean(merged.partidas > 0 || merged.yaJugo);
+    merged.configuroAvatar = Boolean((merged.intentosUsados || 0) > 0 || merged.partidas > 0 || merged.yaJugo);
   }
+  // Asegurar coherencia de intentos
+  if (merged.intentosUsados === undefined) {
+    merged.intentosUsados = merged.yaJugo ? 2 : (merged.partidas > 0 ? 1 : 0);
+  }
+  merged.intentosRestantes = Math.max(0, 2 - merged.intentosUsados);
+  merged.yaJugo = merged.intentosUsados >= 2;
   return merged;
 }
 

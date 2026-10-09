@@ -1,5 +1,6 @@
 import { CONFIG, DEPARTAMENTOS_OFICIALES, K_EVENTO } from './constants.js';
 import { getLocalRanking, perfilVacio } from './storage.js';
+import { backendService } from './backendService.js';
 
 function ruta(o, p) {
   if (!p) return undefined;
@@ -153,13 +154,71 @@ export async function registrarJugador(jugadorData, token) {
   }
 }
 
+export async function consultarIntentosServidor(cedula, token) {
+  if (!cedula) return null;
+  const hdrs = cabecerasAPI(token);
+
+  // 1. Intentar RPC en Supabase
+  if (CONFIG.CONSULTAR_INTENTOS_URL) {
+    try {
+      const r = await fetch(CONFIG.CONSULTAR_INTENTOS_URL, {
+        method: 'POST',
+        headers: hdrs,
+        body: JSON.stringify({ p_cedula: String(cedula) })
+      });
+      if (r.ok) {
+        const d = await r.json();
+        if (d && typeof d === 'object') return d;
+      }
+    } catch (_) {}
+  }
+
+  // 2. Intentar consultar tabla usuario_intentos directamente
+  if (CONFIG.USUARIO_INTENTOS_URL) {
+    try {
+      const url =
+        CONFIG.USUARIO_INTENTOS_URL +
+        (CONFIG.USUARIO_INTENTOS_URL.includes('?') ? '&' : '?') +
+        'cedula=eq.' +
+        encodeURIComponent(cedula) +
+        '&select=*';
+      const r = await fetch(url, { headers: hdrs });
+      if (r.ok) {
+        const arr = await r.json();
+        if (Array.isArray(arr) && arr.length > 0) {
+          const u = arr[0];
+          return {
+            found: true,
+            cedula: u.cedula,
+            nombre: u.nombre,
+            area: u.area,
+            attemptsUsed: Number(u.intentos_usados) || 0,
+            attemptsRemaining: Math.max(0, 2 - (Number(u.intentos_usados) || 0)),
+            firstAttemptScore: u.primer_intento_puntaje,
+            secondAttemptScore: u.segundo_intento_puntaje,
+            rankingScore: u.ranking_puntaje,
+            firstAttemptDate: u.primer_intento_fecha,
+            secondAttemptDate: u.segundo_intento_fecha
+          };
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 3. Fallback al servicio backend local
+  return await backendService.getAttempts(cedula);
+}
+
 export async function cargarPerfilServidor(cedula, token) {
-  if (!CONFIG.RESULTADOS_URL || !cedula) return null;
+  if (!cedula) return null;
 
   try {
     const hdrs = cabecerasAPI(token);
 
-    // 1. Consultar partida en Supabase por cédula
+    // 1. Consultar intentos del usuario
+    const pIntentos = consultarIntentosServidor(cedula, token).catch(() => null);
+
+    // 2. Consultar partida en Supabase por cédula
     const urlPartida =
       CONFIG.RESULTADOS_URL +
       (CONFIG.RESULTADOS_URL.includes('?') ? '&' : '?') +
@@ -167,7 +226,7 @@ export async function cargarPerfilServidor(cedula, token) {
       encodeURIComponent(cedula) +
       '&select=*';
 
-    // 2. Consultar jugador en Supabase por cédula
+    // 3. Consultar jugador en Supabase por cédula
     const baseUrlJugador = CONFIG.RESULTADOS_URL.replace(/\/partida\b/, '/jugador');
     const urlJugador =
       baseUrlJugador +
@@ -176,7 +235,8 @@ export async function cargarPerfilServidor(cedula, token) {
       encodeURIComponent(cedula) +
       '&select=*';
 
-    const [resPartida, resJugador] = await Promise.all([
+    const [intentosData, resPartida, resJugador] = await Promise.all([
+      pIntentos,
       fetch(urlPartida, { headers: hdrs }).catch(() => null),
       fetch(urlJugador, { headers: hdrs }).catch(() => null)
     ]);
@@ -217,19 +277,38 @@ export async function cargarPerfilServidor(cedula, token) {
     // Si jugadorData tiene columna avatar directamente en Supabase, lo cargamos
     if (jugadorData && jugadorData.avatar && typeof jugadorData.avatar === 'object') {
       perfil.avatar = jugadorData.avatar;
-      // NOTA: NO marcar configuroAvatar = true aquí automáticamente, porque la columna
-      // avatar en la tabla de Supabase tiene un DEFAULT por defecto en SQL.
-      // Solo es true si en su perfil guardado se confirmó explícitamente.
       if (jugadorData.perfil && jugadorData.perfil.configuroAvatar === true) {
         perfil.configuroAvatar = true;
       }
     }
 
-    // Si hay partida en Supabase, los datos del servidor mandan
-    if (partidaData) {
+    // Si hay datos de intentos, aplicamos las reglas de negocio
+    if (intentosData && (intentosData.found || intentosData.attemptsUsed > 0)) {
+      perfil.intentosUsados = Number(intentosData.attemptsUsed) || 0;
+      perfil.intentosRestantes = Math.max(0, 2 - perfil.intentosUsados);
+      perfil.primerIntentoPuntaje = intentosData.firstAttemptScore;
+      perfil.segundoIntentoPuntaje = intentosData.secondAttemptScore;
+      perfil.rankingScore = intentosData.rankingScore;
+      perfil.partidas = perfil.intentosUsados;
+      perfil.yaJugo = perfil.intentosUsados >= 2;
+      // REGLA CLAVE: perfil.mejor solo toma rankingScore (que viene exclusivamente del 2do intento)
+      perfil.mejor = Number(intentosData.rankingScore) || 0;
+
+      if (partidaData) {
+        perfil.drenador = Boolean(partidaData.vencio_drenador);
+        if (partidaData.dificultad) perfil.difPref = partidaData.dificultad;
+        if (partidaData.avatar && typeof partidaData.avatar === 'object') {
+          perfil.avatar = partidaData.avatar;
+        }
+      }
+    } else if (partidaData) {
+      // Compatibilidad con registros previos de la tabla partida
       perfil.mejor = Number(partidaData.puntaje) || 0;
+      perfil.rankingScore = Number(partidaData.puntaje) || 0;
       perfil.drenador = Boolean(partidaData.vencio_drenador);
-      perfil.partidas = Math.max(perfil.partidas || 0, 1);
+      perfil.intentosUsados = 2;
+      perfil.intentosRestantes = 0;
+      perfil.partidas = 2;
       perfil.yaJugo = true;
       perfil.configuroAvatar = true;
       if (partidaData.dificultad) {
@@ -239,7 +318,12 @@ export async function cargarPerfilServidor(cedula, token) {
         perfil.avatar = partidaData.avatar;
       }
     } else {
-      // SI NO HAY PARTIDA EN SUPABASE: los puntajes y victorias están en 0
+      // SI NO HAY PARTIDA NI INTENTOS: todo en 0
+      perfil.intentosUsados = 0;
+      perfil.intentosRestantes = 2;
+      perfil.primerIntentoPuntaje = null;
+      perfil.segundoIntentoPuntaje = null;
+      perfil.rankingScore = null;
       perfil.mejor = 0;
       perfil.drenador = false;
       perfil.partidas = 0;
@@ -303,12 +387,8 @@ export async function sincronizarPerfilServidor(cedula, perfil, token) {
 }
 
 export async function guardarPartida(payload, token) {
-  if (!CONFIG.RESULTADOS_URL) {
-    return { ok: true, localOnly: true, msg: 'Puntaje guardado en este equipo.' };
-  }
-
+  // 0. Validar disponibilidad del evento en las fechas configuradas
   try {
-    // 0. Validar que el juego esté abierto y disponible en las fechas configuradas
     const ev = await obtenerEvento(token);
     const disp = verificarDisponibilidad(ev);
     if (!disp.disponible) {
@@ -318,69 +398,113 @@ export async function guardarPartida(payload, token) {
         msg: 'El juego se encuentra actualmente cerrado. No se pueden registrar más partidas en este momento.'
       };
     }
+  } catch (e) {}
 
-    // 1. Verificar si ya existe una partida para esta cédula (solo 1 oportunidad por jugador)
-    const checkUrl =
-      CONFIG.RESULTADOS_URL +
-      (CONFIG.RESULTADOS_URL.includes('?') ? '&' : '?') +
-      'cedula=eq.' +
-      encodeURIComponent(payload.cedula) +
-      '&select=id,puntaje';
-    const checkRes = await fetch(checkUrl, { headers: cabecerasAPI(token) }).catch(() => null);
-    if (checkRes && checkRes.ok) {
-      const prev = await checkRes.json().catch(() => []);
-      if (Array.isArray(prev) && prev.length > 0) {
-        return {
-          ok: false,
-          yaExiste: true,
-          msg: 'Ya completaste tu única oportunidad en esta competencia. No se permiten más intentos.'
-        };
-      }
-    }
+  // 1. Intentar llamar al procedimiento almacenado seguro en Supabase
+  if (CONFIG.REGISTRAR_INTENTO_URL) {
+    try {
+      const hdrs = cabecerasAPI(token);
+      const rpcBody = {
+        p_cedula: String(payload.cedula),
+        p_nombre: payload.nombre || 'Colaborador',
+        p_area: payload.area || '',
+        p_dificultad: payload.dificultad || 'media',
+        p_puntaje: Math.max(0, Math.round(Number(payload.puntaje) || 0)),
+        p_porcentaje_aciertos: payload.porcentaje_aciertos ?? null,
+        p_vencio_drenador: Boolean(payload.vencio_drenador),
+        p_capitulos: payload.capitulos || [],
+        p_avatar: payload.avatar || null,
+        p_fecha_inicio: payload.fecha_inicio || null
+      };
 
-    // 2. Insertar la única partida del jugador
-    const hdrs = Object.assign({}, cabecerasAPI(token));
-
-    let r = await fetch(CONFIG.RESULTADOS_URL, {
-      method: 'POST',
-      headers: hdrs,
-      body: JSON.stringify(payload)
-    });
-
-    // Si falla porque public.partida no tiene aún la columna avatar (error 400),
-    // reintentamos sin el campo avatar para que no se pierda la partida:
-    if (!r.ok && r.status === 400 && payload.avatar) {
-      const { avatar, ...fallbackPayload } = payload;
-      r = await fetch(CONFIG.RESULTADOS_URL, {
+      const res = await fetch(CONFIG.REGISTRAR_INTENTO_URL, {
         method: 'POST',
         headers: hdrs,
-        body: JSON.stringify(fallbackPayload)
+        body: JSON.stringify(rpcBody)
+      });
+
+      if (res.status === 409) {
+        const errJson = await res.json().catch(() => ({}));
+        return {
+          ok: false,
+          conflict: true,
+          status: 409,
+          attemptsUsed: 2,
+          attemptsRemaining: 0,
+          msg: errJson.message || 'El usuario ya utilizó sus 2 intentos disponibles.'
+        };
+      }
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && typeof data === 'object') {
+          if (data.ok === false && (data.status === 409 || data.error === 'CONFLICT')) {
+            return {
+              ok: false,
+              conflict: true,
+              status: 409,
+              attemptsUsed: 2,
+              attemptsRemaining: 0,
+              msg: data.message || 'El usuario ya utilizó sus 2 intentos disponibles.'
+            };
+          }
+
+          // Sincronizar también con backendService en memoria local
+          await backendService.registerAttempt(payload).catch(() => {});
+
+          return {
+            ok: true,
+            attempt: data.attempt,
+            score: data.score,
+            countsForRanking: Boolean(data.countsForRanking),
+            attemptsUsed: data.attemptsUsed,
+            attemptsRemaining: data.attemptsRemaining,
+            firstAttemptScore: data.firstAttemptScore,
+            secondAttemptScore: data.secondAttemptScore,
+            rankingScore: data.rankingScore,
+            msg: data.message
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('RPC Supabase registrar_intento no disponible, usando backend de resguardo:', err);
+    }
+  }
+
+  // 2. Fallback al servicio backend local (garantiza la misma regla transaccional y ranking exclusivo intento 2)
+  const localResp = await backendService.registerAttempt(payload);
+  if (localResp.ok) {
+    if (localResp.attempt === 2) {
+      const dRun = DIFS[payload.dificultad] || DIFS.media;
+      guardarLocalRanking({
+        cedula: payload.cedula,
+        nombre: payload.nombre,
+        area: payload.area || '',
+        puntos: localResp.rankingScore,
+        dificultad: dRun.nombre
       });
     }
 
-    if (r.ok) {
-      return { ok: true, msg: 'Tu puntaje quedó registrado en el ranking oficial.' };
-    } else {
-      const errTxt = await r.text().catch(() => '');
-      console.warn('Error al guardar en Supabase:', r.status, errTxt);
-      let msg = 'No se pudo sincronizar con el ranking general. Quedó guardado en este equipo.';
-      if (errTxt.includes('evento_cerrado')) {
-        msg = 'El evento se encuentra actualmente cerrado. No se pueden registrar partidas.';
-      } else if (errTxt.includes('oportunidad_agotada') || errTxt.includes('partida_cedula_key') || errTxt.includes('duplicate key')) {
-        msg = 'Ya registraste tu única oportunidad en el evento. No se permiten más intentos.';
-      } else if (errTxt.includes('puntaje_invalido')) {
-        msg = 'El puntaje supera el límite máximo configurado en Supabase (evento.max_puntaje_base).';
-      }
-      return {
-        ok: false,
-        msg
-      };
-    }
-  } catch (e) {
-    console.warn('Excepción al conectar con Supabase:', e);
+    return {
+      ok: true,
+      attempt: localResp.attempt,
+      score: localResp.score,
+      countsForRanking: localResp.countsForRanking,
+      attemptsUsed: localResp.attemptsUsed,
+      attemptsRemaining: localResp.attemptsRemaining,
+      firstAttemptScore: localResp.firstAttemptScore,
+      secondAttemptScore: localResp.secondAttemptScore,
+      rankingScore: localResp.rankingScore,
+      msg: localResp.message
+    };
+  } else {
     return {
       ok: false,
-      msg: 'No se pudo sincronizar con el ranking general. Quedó guardado en este equipo.'
+      conflict: localResp.status === 409,
+      status: localResp.status || 400,
+      attemptsUsed: localResp.attemptsUsed,
+      attemptsRemaining: localResp.attemptsRemaining,
+      msg: localResp.message || 'No se pudo registrar el intento.'
     };
   }
 }

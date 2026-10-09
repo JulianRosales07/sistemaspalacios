@@ -26,7 +26,11 @@ export default function MenuScreen({
       : session.cedula
     : '';
 
-  const yaJugo = haJugado(profile);
+  const intentosUsados = Number(
+    profile?.intentosUsados ?? (profile?.yaJugo ? 2 : (profile?.partidas > 0 ? 1 : 0))
+  );
+  const intentosRestantes = Math.max(0, 2 - intentosUsados);
+  const yaJugo = intentosUsados >= 2;
   const admin = esAdmin(session?.cedula);
   const juegoHabilitado = disponibilidad ? disponibilidad.disponible : true;
 
@@ -50,15 +54,19 @@ export default function MenuScreen({
     if (onPlay) onPlay();
   };
 
-  // Texto y estilo del botón de juego
+  // Texto y estilo del botón de juego según intentos
   let textoBotonJugar = 'JUGAR';
   let colorBotonJugar = 't-teal';
-  let tituloBotonJugar = 'Comenzar aventura';
+  let tituloBotonJugar = 'Comenzar aventura (Intento 1 de 2)';
 
-  if (yaJugo) {
-    textoBotonJugar = '🔒 JUGADO (1/1)';
+  if (intentosUsados === 1) {
+    textoBotonJugar = 'JUGAR SEGUNDO INTENTO';
+    colorBotonJugar = 't-ambar';
+    tituloBotonJugar = 'Tu segundo intento será tu puntaje oficial para el ranking';
+  } else if (yaJugo) {
+    textoBotonJugar = '🔒 JUGADO (2/2)';
     colorBotonJugar = 't-gris';
-    tituloBotonJugar = 'Ya completaste tu única oportunidad';
+    tituloBotonJugar = 'Ya utilizaste tus 2 intentos disponibles';
   } else if (!juegoHabilitado) {
     colorBotonJugar = 't-gris';
     if (disponibilidad?.motivo === 'antes') {
@@ -69,6 +77,21 @@ export default function MenuScreen({
       tituloBotonJugar = 'El juego se encuentra actualmente cerrado';
     }
   }
+
+  // Texto del badge de oportunidades
+  const badgeOportunidadTexto =
+    intentosUsados === 0
+      ? '⚡ Intentos disponibles: 2 de 2'
+      : intentosUsados === 1
+      ? '🟡 Intentos utilizados: 1 de 2'
+      : '🔒 Intentos utilizados: 2 de 2';
+
+  const badgeClase =
+    intentosUsados === 0
+      ? 'libre'
+      : intentosUsados === 1
+      ? 'alerta'
+      : 'usada';
 
   return (
     <>
@@ -96,11 +119,35 @@ export default function MenuScreen({
               </div>
             )}
 
-            <div className={`badge-oportunidad ${yaJugo ? 'usada' : 'libre'}`}>
-              {yaJugo ? '🔒 Oportunidad completada (1/1)' : '⚡ 1 oportunidad disponible'}
+            <div className={`badge-oportunidad ${badgeClase}`}>
+              {badgeOportunidadTexto}
             </div>
           </div>
         </div>
+
+        {/* Mensaje destacado si ya completó el primer intento */}
+        {intentosUsados === 1 && (
+          <div
+            className="menu-aviso-intento1"
+            style={{
+              background: 'rgba(255, 183, 77, 0.15)',
+              border: '1px solid rgba(255, 183, 77, 0.5)',
+              borderRadius: '12px',
+              padding: '8px 14px',
+              margin: '4px auto 10px auto',
+              maxWidth: '460px',
+              textAlign: 'center',
+              fontSize: '0.86rem',
+              color: '#FFF4E0',
+              lineHeight: '1.35',
+              backdropFilter: 'blur(4px)'
+            }}
+          >
+            ⚡ <b>Primer intento completado</b> ({profile?.primerIntentoPuntaje ? `${profile.primerIntentoPuntaje} pts` : 'listo'}).
+            <br />
+            Este puntaje no afecta el ranking. <b>Tu segundo intento será tu puntaje oficial.</b>
+          </div>
+        )}
 
         <h1 className="titulo-juego">
           BATERÍA

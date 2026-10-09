@@ -75,11 +75,40 @@ export default function ProfileScreen({ session, profile, onBackToMenu, onProfil
     ? 'Aventura completada'
     : 'Sin iniciar';
 
+  const intentosUsados = Number(
+    profile?.intentosUsados ?? (profile?.yaJugo ? 2 : (profile?.partidas > 0 ? 1 : 0))
+  );
+  const estadoIntentos =
+    intentosUsados === 0
+      ? '0 de 2 (2 disponibles)'
+      : intentosUsados === 1
+      ? '1 de 2 (1 disponible)'
+      : '2 de 2 (Agotados)';
+
+  const primerIntentoTxt =
+    profile?.primerIntentoPuntaje !== null && profile?.primerIntentoPuntaje !== undefined
+      ? `${num(profile.primerIntentoPuntaje)} pts (Historial, no suma al ranking)`
+      : 'Sin jugar';
+
+  const segundoIntentoTxt =
+    profile?.segundoIntentoPuntaje !== null && profile?.segundoIntentoPuntaje !== undefined
+      ? `${num(profile.segundoIntentoPuntaje)} pts (Puntaje oficial)`
+      : intentosUsados === 1
+      ? 'Pendiente por jugar'
+      : 'Sin jugar';
+
+  const rankingOficialTxt =
+    profile?.rankingScore !== null && profile?.rankingScore !== undefined
+      ? `${num(profile.rankingScore)} pts`
+      : 'Sin registrar (se define en el 2º intento)';
+
   const datos = [
     ...(session?.area ? [['Área', session.area]] : []),
-    ['Oportunidad de juego', jugado ? 'Completada (1 de 1)' : 'Disponible (1 intento)'],
+    ['Intentos utilizados', estadoIntentos],
+    ['Primer intento', primerIntentoTxt],
+    ['Segundo intento', segundoIntentoTxt],
+    ['Puntaje oficial ranking', rankingOficialTxt],
     ['Dificultad elegida', dAct.nombre],
-    ['Puntaje registrado', num(profile?.mejor || 0)],
     ['Avance actual', avance],
     ['Drenador vencido', profile?.drenador ? 'Sí' : 'Todavía no'],
     ['Veces que dijiste NO', k.no || 0],

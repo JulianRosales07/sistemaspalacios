@@ -43,6 +43,174 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Almacenamiento en memoria para gestión de intentos y ranking en proxy local
+  if (!global._attemptsStore) {
+    global._attemptsStore = new Map();
+    global._auditLogs = [];
+  }
+
+  // Endpoint: Registrar Intento
+  if ((req.url === '/api/attempts/register' || req.url === '/api/partida') && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const cedula = String(payload.cedula || '').replace(/\D/g, '').trim();
+        if (!cedula) {
+          res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ error: 'Cédula requerida' }));
+          return;
+        }
+
+        let user = global._attemptsStore.get(cedula);
+        if (!user) {
+          user = {
+            cedula,
+            nombre: payload.nombre || 'Colaborador',
+            area: payload.area || '',
+            attemptsUsed: 0,
+            firstAttemptScore: null,
+            secondAttemptScore: null,
+            rankingScore: null,
+            dificultad: payload.dificultad || 'media'
+          };
+          global._attemptsStore.set(cedula, user);
+        }
+
+        // Rechazo inmediato si ya agotó sus 2 intentos
+        if (user.attemptsUsed >= 2) {
+          res.writeHead(409, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({
+            ok: false,
+            error: 'CONFLICT',
+            message: 'El usuario ya utilizó sus 2 intentos disponibles.',
+            attemptsUsed: 2,
+            attemptsRemaining: 0
+          }));
+          return;
+        }
+
+        const score = Math.max(0, Math.round(Number(payload.puntaje) || 0));
+        const currentAttempt = user.attemptsUsed + 1;
+        const now = new Date().toISOString();
+
+        if (currentAttempt === 1) {
+          user.attemptsUsed = 1;
+          user.firstAttemptScore = score;
+          user.firstAttemptDate = now;
+
+          global._auditLogs.push({
+            cedula,
+            numeroIntento: 1,
+            puntaje: score,
+            cuentaParaRanking: false,
+            fechaHoraRegistro: now
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({
+            ok: true,
+            attempt: 1,
+            score,
+            countsForRanking: false,
+            attemptsUsed: 1,
+            attemptsRemaining: 1,
+            firstAttemptScore: score,
+            rankingScore: null,
+            message: 'Tu primer intento fue completado. Este puntaje no afecta el ranking. Tu segundo intento será tu puntaje oficial.'
+          }));
+          return;
+        } else if (currentAttempt === 2) {
+          user.attemptsUsed = 2;
+          user.secondAttemptScore = score;
+          user.rankingScore = score; // Exclusivamente intento 2
+          user.secondAttemptDate = now;
+
+          global._auditLogs.push({
+            cedula,
+            numeroIntento: 2,
+            puntaje: score,
+            cuentaParaRanking: true,
+            fechaHoraRegistro: now
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({
+            ok: true,
+            attempt: 2,
+            score,
+            countsForRanking: true,
+            attemptsUsed: 2,
+            attemptsRemaining: 0,
+            firstAttemptScore: user.firstAttemptScore,
+            secondAttemptScore: score,
+            rankingScore: score,
+            message: `Tu puntaje oficial es: ${score}. Este puntaje ha sido registrado en el ranking.`
+          }));
+          return;
+        }
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: 'Payload JSON inválido' }));
+      }
+    });
+    return;
+  }
+
+  // Endpoint: Consultar Intentos de Usuario
+  const attemptMatch = req.url.match(/^\/api\/attempts\/(\d{5,12})$/);
+  if (attemptMatch && req.method === 'GET') {
+    const cedula = attemptMatch[1];
+    const user = global._attemptsStore.get(cedula);
+    if (!user) {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        found: false,
+        attemptsUsed: 0,
+        attemptsRemaining: 2,
+        firstAttemptScore: null,
+        secondAttemptScore: null,
+        rankingScore: null
+      }));
+      return;
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({
+      found: true,
+      cedula: user.cedula,
+      nombre: user.nombre,
+      area: user.area,
+      attemptsUsed: user.attemptsUsed,
+      attemptsRemaining: Math.max(0, 2 - user.attemptsUsed),
+      firstAttemptScore: user.firstAttemptScore,
+      secondAttemptScore: user.secondAttemptScore,
+      rankingScore: user.rankingScore
+    }));
+    return;
+  }
+
+  // Endpoint: Ranking Oficial (Solo intento 2)
+  if (req.url === '/api/ranking' && req.method === 'GET') {
+    const ranking = [];
+    for (const u of global._attemptsStore.values()) {
+      if (u.attemptsUsed === 2 && u.rankingScore !== null) {
+        ranking.push({
+          cedula: u.cedula,
+          nombre: u.nombre,
+          area: u.area,
+          puntaje: u.rankingScore,
+          dificultad: u.dificultad
+        });
+      }
+    }
+    ranking.sort((a, b) => b.puntaje - a.puntaje);
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify(ranking.map((r, i) => ({ posicion: i + 1, ...r }))));
+    return;
+  }
+
   // Si la ruta pide la lista general de empleados o departamentos
   if (req.url.startsWith('/api/employees') && !req.url.match(/(\d{5,12})/)) {
     try {

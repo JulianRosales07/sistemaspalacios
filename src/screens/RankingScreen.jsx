@@ -335,6 +335,24 @@ export default function RankingScreen({ session, onBackToMenu }) {
           </button>
         </div>
 
+        {/* Nota explicativa de la regla oficial del ranking */}
+        <div
+          style={{
+            background: 'rgba(26, 20, 51, 0.65)',
+            border: '1px solid rgba(255, 244, 224, 0.2)',
+            borderRadius: '10px',
+            padding: '8px 12px',
+            margin: '8px auto 10px auto',
+            maxWidth: '520px',
+            textAlign: 'center',
+            fontSize: '0.84rem',
+            color: 'var(--crema-suave)',
+            lineHeight: '1.35'
+          }}
+        >
+          🏆 <b>Regla de clasificación:</b> El ranking oficial se determina <b>exclusivamente con el puntaje del 2º intento</b>. El 1º intento es de práctica y no suma al ranking.
+        </div>
+
         {/* Filtro de Departamento en pestaña Jugadores */}
         {tab === 'jugadores' && (
           <div className="rk-filtro-fila">
