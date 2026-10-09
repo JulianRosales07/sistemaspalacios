@@ -76,7 +76,7 @@ export default function LoginScreen({ onLoginSuccess }) {
         </button>
 
         <p className="login-pie">
-          ⚡ <b>1 sola oportunidad:</b> tu puntaje final quedará registrado en el ranking de la Semana SST.
+          ⚡ <b>2 oportunidades:</b> tu puntaje final quedará registrado tras el último intento, en el ranking de la Semana SST.
         </p>
       </form>
     </section>
