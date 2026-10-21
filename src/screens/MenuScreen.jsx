@@ -10,6 +10,7 @@ export default function MenuScreen({
   profile,
   disponibilidad,
   onPlay,
+  onAlreadyPlayed,
   onProfile,
   onDetails,
   onRanking,
@@ -30,7 +31,7 @@ export default function MenuScreen({
     profile?.intentosUsados ?? (profile?.yaJugo ? 2 : (profile?.partidas > 0 ? 1 : 0))
   );
   const intentosRestantes = Math.max(0, 2 - intentosUsados);
-  const yaJugo = intentosUsados >= 2;
+  const yaJugo = intentosUsados >= 2 || Boolean(profile?.yaJugo);
   const admin = esAdmin(session?.cedula);
   const juegoHabilitado = disponibilidad ? disponibilidad.disponible : true;
 
@@ -45,6 +46,12 @@ export default function MenuScreen({
   };
 
   const handlePlayClick = () => {
+    // Bloqueo inmediato al terminar el segundo intento
+    if (yaJugo || intentosUsados >= 2) {
+      sfx.mal();
+      if (onAlreadyPlayed) onAlreadyPlayed();
+      return;
+    }
     // Si el juego está cerrado, no se debe dejar jugar bajo ninguna circunstancia desde el menú
     if (!juegoHabilitado) {
       sfx.mal();

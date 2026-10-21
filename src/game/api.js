@@ -1,5 +1,5 @@
-import { CONFIG, DEPARTAMENTOS_OFICIALES, K_EVENTO } from './constants.js';
-import { getLocalRanking, perfilVacio } from './storage.js';
+import { CONFIG, DEPARTAMENTOS_OFICIALES, K_EVENTO, DIFS } from './constants.js';
+import { getLocalRanking, guardarLocalRanking, cargarPerfil, perfilVacio } from './storage.js';
 import { backendService } from './backendService.js';
 
 function ruta(o, p) {
@@ -329,6 +329,23 @@ export async function cargarPerfilServidor(cedula, token) {
       perfil.partidas = 0;
       perfil.yaJugo = false;
       perfil.run = null;
+    }
+
+    // Blindaje contra reinicio de intentos:
+    // Si localmente el colaborador ya completó 1 o 2 intentos, jamás rebajarlo a 0.
+    const local = cargarPerfil(cedula);
+    if (local && (local.intentosUsados > 0 || local.yaJugo)) {
+      if ((perfil.intentosUsados || 0) < local.intentosUsados || local.yaJugo) {
+        perfil.intentosUsados = Math.max(perfil.intentosUsados || 0, local.intentosUsados);
+        perfil.yaJugo = local.yaJugo || perfil.intentosUsados >= 2;
+        perfil.intentosRestantes = perfil.yaJugo ? 0 : Math.max(0, 2 - perfil.intentosUsados);
+        perfil.primerIntentoPuntaje = perfil.primerIntentoPuntaje ?? local.primerIntentoPuntaje;
+        perfil.segundoIntentoPuntaje = perfil.segundoIntentoPuntaje ?? local.segundoIntentoPuntaje;
+        perfil.rankingScore = perfil.rankingScore ?? local.rankingScore;
+        perfil.partidas = perfil.intentosUsados;
+        perfil.mejor = perfil.rankingScore || local.mejor || 0;
+        perfil.ultimoIntento = perfil.ultimoIntento || local.ultimoIntento;
+      }
     }
 
     return perfil;

@@ -18,10 +18,9 @@ export default function EndScreen({
   const pct = ac + er ? ac / (ac + er) : 0;
 
   // Determinar número de intento actual
-  const attemptNum =
-    intentoInfo?.attempt ||
-    (profile?.intentosUsados === 1 ? 1 : profile?.intentosUsados >= 2 ? 2 : 1);
-  const esPrimerIntento = attemptNum === 1;
+  const esYaJugo = Boolean(profile?.yaJugo || (profile?.intentosUsados ?? 0) >= 2 || intentoInfo?.attempt === 2);
+  const attemptNum = esYaJugo ? 2 : (intentoInfo?.attempt || (profile?.intentosUsados === 1 ? 1 : 1));
+  const esPrimerIntento = !esYaJugo && attemptNum === 1;
   const primerIntentoPuntaje =
     intentoInfo?.firstAttemptScore ?? profile?.primerIntentoPuntaje ?? (esPrimerIntento ? run.puntos : null);
 

@@ -60,18 +60,19 @@ export function perfilVacio() {
 export function puedeJugar(perfil) {
   if (!perfil) return false;
   const usados = Number(perfil.intentosUsados ?? (perfil.yaJugo ? 2 : perfil.partidas ?? 0));
-  return usados < 2;
+  return Boolean(usados < 2 && !perfil.yaJugo);
 }
 
 export function haJugado(perfil) {
   if (!perfil) return false;
   const usados = Number(perfil.intentosUsados ?? (perfil.yaJugo ? 2 : 0));
-  return Boolean(usados >= 2 || (perfil.yaJugo && perfil.intentosUsados === undefined));
+  return Boolean(usados >= 2 || perfil.yaJugo);
 }
 
 export function intentosDisponibles(perfil) {
   if (!perfil) return 2;
-  const usados = Number(perfil.intentosUsados ?? (perfil.yaJugo ? 2 : 0));
+  if (perfil.yaJugo) return 0;
+  const usados = Number(perfil.intentosUsados ?? 0);
   return Math.max(0, 2 - usados);
 }
 
@@ -90,8 +91,13 @@ export function cargarPerfil(cedula) {
   if (merged.intentosUsados === undefined) {
     merged.intentosUsados = merged.yaJugo ? 2 : (merged.partidas > 0 ? 1 : 0);
   }
-  merged.intentosRestantes = Math.max(0, 2 - merged.intentosUsados);
-  merged.yaJugo = merged.intentosUsados >= 2;
+  if (merged.yaJugo || merged.intentosUsados >= 2) {
+    merged.intentosUsados = Math.max(merged.intentosUsados || 0, 2);
+    merged.yaJugo = true;
+    merged.intentosRestantes = 0;
+  } else {
+    merged.intentosRestantes = Math.max(0, 2 - merged.intentosUsados);
+  }
   return merged;
 }
 

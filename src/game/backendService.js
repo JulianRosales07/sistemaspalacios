@@ -46,12 +46,43 @@ class AttemptsBackendService {
     }
   }
 
+  _getUser(ced) {
+    let user = this.users.get(ced);
+    if (!user && typeof localStorage !== 'undefined') {
+      try {
+        const raw = localStorage.getItem('b100_perfil_' + ced);
+        if (raw) {
+          const perfil = JSON.parse(raw);
+          const yaJugo = Boolean(perfil.yaJugo || (perfil.intentosUsados ?? 0) >= 2);
+          const attemptsUsed = yaJugo ? 2 : Number(perfil.intentosUsados ?? 0);
+          if (attemptsUsed > 0 || yaJugo) {
+            user = {
+              cedula: ced,
+              nombre: perfil.nombre || 'Colaborador',
+              area: perfil.area || '',
+              attemptsUsed,
+              firstAttemptScore: perfil.primerIntentoPuntaje ?? null,
+              secondAttemptScore: perfil.segundoIntentoPuntaje ?? null,
+              rankingScore: perfil.rankingScore ?? null,
+              firstAttemptDate: null,
+              secondAttemptDate: null,
+              dificultad: perfil.difPref || 'media',
+              avatar: perfil.avatar || null
+            };
+            this.users.set(ced, user);
+          }
+        }
+      } catch (_) {}
+    }
+    return user;
+  }
+
   /**
    * Consultar estado de intentos de un usuario
    */
   async getAttempts(cedula) {
     const ced = String(cedula || '').trim();
-    const user = this.users.get(ced);
+    const user = this._getUser(ced);
 
     if (!user) {
       return {
@@ -115,7 +146,7 @@ class AttemptsBackendService {
     const now = new Date().toISOString();
 
     return await this._withLock(ced, async () => {
-      let user = this.users.get(ced);
+      let user = this._getUser(ced);
 
       // Si no existe, inicializar registro
       if (!user) {

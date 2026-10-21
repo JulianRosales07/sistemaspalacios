@@ -298,4 +298,37 @@ describe('Mecánica de 2 Intentos y Ranking Oficial', () => {
     assert.strictEqual(logs[1].cuentaParaRanking, true);
     assert.strictEqual(logs[1].dificultad, 'media');
   });
+
+  test('Caso 11: Bloqueo inmediato al terminar el segundo intento (puedeJugar=false, haJugado=true, intentosRestantes=0)', async () => {
+    const cedula = '10000011';
+
+    // Primer intento
+    const r1 = await backendService.registerAttempt({ cedula, puntaje: 800 });
+    assert.strictEqual(r1.ok, true);
+    assert.strictEqual(r1.attempt, 1);
+
+    // Segundo intento
+    const r2 = await backendService.registerAttempt({ cedula, puntaje: 950 });
+    assert.strictEqual(r2.ok, true);
+    assert.strictEqual(r2.attempt, 2);
+    assert.strictEqual(r2.attemptsUsed, 2);
+    assert.strictEqual(r2.attemptsRemaining, 0);
+
+    // Simular perfil local actualizado tras el segundo intento
+    const perfil = perfilVacio();
+    perfil.intentosUsados = r2.attemptsUsed;
+    perfil.intentosRestantes = r2.attemptsRemaining;
+    perfil.yaJugo = r2.attemptsUsed >= 2;
+    perfil.rankingScore = r2.rankingScore;
+
+    // Validar bloqueo inmediato
+    assert.strictEqual(puedeJugar(perfil), false, 'No debe permitir jugar de ninguna manera');
+    assert.strictEqual(haJugado(perfil), true, 'Debe considerarse jugado');
+    assert.strictEqual(perfil.intentosRestantes, 0);
+
+    // Un tercer intento debe ser rechazado inmediatamente
+    const r3 = await backendService.registerAttempt({ cedula, puntaje: 999 });
+    assert.strictEqual(r3.ok, false);
+    assert.strictEqual(r3.status, 409);
+  });
 });

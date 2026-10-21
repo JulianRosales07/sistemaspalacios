@@ -228,7 +228,7 @@ export default function App() {
       return;
     }
 
-    if (!puedeJugar(profile)) {
+    if (!puedeJugar(profile) || profile.yaJugo || (profile.intentosUsados ?? 0) >= 2) {
       setShowAlreadyPlayedModal(true);
       sfx.mal();
       return;
@@ -290,6 +290,11 @@ export default function App() {
   const handlePlaySecondAttempt = useCallback(() => {
     sfx.clic();
     if (!profile) return;
+    if (!puedeJugar(profile) || profile.yaJugo || (profile.intentosUsados ?? 0) >= 2) {
+      setShowAlreadyPlayedModal(true);
+      setScreen('menu');
+      return;
+    }
     const freshProfile = { ...profile, run: null };
     updateProfile(freshProfile);
     setSelectedChapter(0);
@@ -318,38 +323,53 @@ export default function App() {
       avatar: profile?.avatar || null
     };
 
-    const res = await guardarPartida(payload, session.token);
-    setSaveStatus(res.msg || (res.ok ? 'Puntaje registrado exitosamente.' : 'No se pudo registrar el puntaje.'));
+    let res = null;
+    try {
+      res = await guardarPartida(payload, session.token);
+      setSaveStatus(res.msg || (res.ok ? 'Puntaje registrado exitosamente.' : 'No se pudo registrar el puntaje.'));
+    } catch (err) {
+      console.warn('Error al guardar partida:', err);
+      setSaveStatus('Puntaje registrado localmente.');
+      res = { ok: false };
+    }
 
-    const esIntento1 = res.attempt === 1;
-    const esIntento2 = res.attempt === 2;
-    const intentosUsados = res.attemptsUsed ?? (esIntento1 ? 1 : 2);
-    const intentosRestantes = res.attemptsRemaining ?? (2 - intentosUsados);
-    const yaJugoFinal = intentosUsados >= 2;
+    // Regla estricta: si ya tenía 1 intento previo, este resultado es DEFINITIVAMENTE el Intento 2
+    const yaTeniaUnIntento =
+      (profile?.intentosUsados ?? 0) >= 1 ||
+      (profile?.primerIntentoPuntaje !== null && profile?.primerIntentoPuntaje !== undefined) ||
+      Boolean(profile?.yaJugo);
+
+    const esIntento2 = res?.attempt === 2 || yaTeniaUnIntento;
+    const esIntento1 = !esIntento2;
+    const intentosUsados = esIntento2 ? 2 : 1;
+    const intentosRestantes = esIntento2 ? 0 : 1;
+    const yaJugoFinal = esIntento2;
 
     // REGLA: El rankingScore es EXCLUSIVAMENTE del intento 2 (NUNCA MAX).
     const nuevoRankingScore = esIntento2 ? finalRun.puntos : (profile?.rankingScore ?? null);
+    const primerPuntaje = esIntento1 ? finalRun.puntos : (profile?.primerIntentoPuntaje ?? res?.firstAttemptScore ?? null);
+    const segundoPuntaje = esIntento2 ? finalRun.puntos : (profile?.segundoIntentoPuntaje ?? res?.secondAttemptScore ?? null);
 
     const updated = {
       ...profile,
       partidas: intentosUsados,
       intentosUsados,
       intentosRestantes,
-      primerIntentoPuntaje: esIntento1 ? finalRun.puntos : (profile?.primerIntentoPuntaje ?? null),
-      segundoIntentoPuntaje: esIntento2 ? finalRun.puntos : (profile?.segundoIntentoPuntaje ?? null),
+      primerIntentoPuntaje: primerPuntaje,
+      segundoIntentoPuntaje: segundoPuntaje,
       rankingScore: nuevoRankingScore,
-      mejor: nuevoRankingScore || 0,
+      mejor: nuevoRankingScore || profile?.mejor || 0,
       yaJugo: yaJugoFinal,
       capMax: 4,
       drenador: finalRun.victoria || profile?.drenador,
       ultimoIntento: {
-        attempt: res.attempt || (esIntento1 ? 1 : 2),
+        attempt: esIntento2 ? 2 : 1,
         score: finalRun.puntos,
-        countsForRanking: Boolean(res.countsForRanking),
-        attemptsUsed,
+        countsForRanking: esIntento2,
+        attemptsUsed: intentosUsados,
         attemptsRemaining: intentosRestantes,
-        firstAttemptScore: esIntento1 ? finalRun.puntos : (profile?.primerIntentoPuntaje ?? null),
-        secondAttemptScore: esIntento2 ? finalRun.puntos : null,
+        firstAttemptScore: primerPuntaje,
+        secondAttemptScore: segundoPuntaje,
         rankingScore: nuevoRankingScore
       },
       run: null
@@ -371,11 +391,21 @@ export default function App() {
     // Sincronizar contadores e insignias con la tabla jugador en Supabase
     sincronizarPerfilServidor(session.cedula, updated, session.token);
 
-    // Recargar perfil validado desde el servidor
-    if (res.ok) {
+    // Recargar perfil validado desde el servidor sin permitir reducir intentos
+    if (res?.ok) {
       const servidorPerfil = await cargarPerfilServidor(session.cedula, session.token);
       if (servidorPerfil) {
-        updateProfile(servidorPerfil);
+        const merged = {
+          ...servidorPerfil,
+          intentosUsados: Math.max(servidorPerfil.intentosUsados || 0, updated.intentosUsados),
+          yaJugo: servidorPerfil.yaJugo || updated.yaJugo,
+          intentosRestantes: Math.min(servidorPerfil.intentosRestantes ?? 2, updated.intentosRestantes),
+          primerIntentoPuntaje: servidorPerfil.primerIntentoPuntaje ?? updated.primerIntentoPuntaje,
+          segundoIntentoPuntaje: servidorPerfil.segundoIntentoPuntaje ?? updated.segundoIntentoPuntaje,
+          rankingScore: servidorPerfil.rankingScore ?? updated.rankingScore,
+          ultimoIntento: updated.ultimoIntento
+        };
+        updateProfile(merged);
       }
     }
   }, [profile, session, updateProfile]);
@@ -492,6 +522,7 @@ export default function App() {
             profile={profile}
             disponibilidad={verificarDisponibilidad(evento)}
             onPlay={handlePlayFromMenu}
+            onAlreadyPlayed={() => setShowAlreadyPlayedModal(true)}
             onProfile={handleOpenProfile}
             onDetails={() => setScreen('detalles')}
             onRanking={() => setScreen('ranking')}
