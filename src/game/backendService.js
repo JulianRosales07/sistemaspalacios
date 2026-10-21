@@ -316,6 +316,23 @@ class AttemptsBackendService {
     const ced = String(cedula || '').trim();
     return this.auditLogs.filter(a => a.cedula === ced);
   }
+
+  /**
+   * Eliminar usuario del ranking y del historial
+   */
+  deleteUser(cedula) {
+    const ced = String(cedula || '').trim();
+    this.users.delete(ced);
+    this.auditLogs = this.auditLogs.filter(a => a.cedula !== ced);
+  }
+
+  /**
+   * Limpiar todo el ranking
+   */
+  resetRanking() {
+    this.users.clear();
+    this.auditLogs = [];
+  }
 }
 
 export const backendService = new AttemptsBackendService();

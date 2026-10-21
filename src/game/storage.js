@@ -144,3 +144,36 @@ export function guardarLocalRanking(record) {
   lsSet(K_RANK, rk.slice(0, 50));
   return rk;
 }
+
+export function eliminarDeLocalRanking(cedula) {
+  if (!cedula) return [];
+  const ced = String(cedula).trim();
+  const rk = getLocalRanking().filter(x => String(x.cedula).trim() !== ced);
+  lsSet(K_RANK, rk);
+  return rk;
+}
+
+export function limpiarLocalRanking() {
+  lsDel(K_RANK);
+  return [];
+}
+
+export function resetearIntentosLocal(cedula) {
+  if (!cedula) return;
+  const key = K_PERF + String(cedula).trim();
+  const perfil = ls(key, null);
+  if (perfil) {
+    perfil.intentosUsados = 0;
+    perfil.intentosRestantes = 2;
+    perfil.primerIntentoPuntaje = null;
+    perfil.segundoIntentoPuntaje = null;
+    perfil.rankingScore = null;
+    perfil.mejor = 0;
+    perfil.yaJugo = false;
+    perfil.partidas = 0;
+    perfil.ultimoIntento = null;
+    perfil.run = null;
+    lsSet(key, perfil);
+  }
+}
+

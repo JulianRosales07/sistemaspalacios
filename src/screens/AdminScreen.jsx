@@ -5,7 +5,9 @@ import {
   actualizarEvento,
   verificarDisponibilidad,
   obtenerMetricasAdmin,
-  formatearFechaLarga
+  formatearFechaLarga,
+  eliminarJugadorRanking,
+  limpiarTodoRanking
 } from '../game/api';
 import { num } from '../game/canvasUtils';
 import { sfx } from '../game/audio';
@@ -44,6 +46,11 @@ export default function AdminScreen({
   const [mensajeError, setMensajeError] = useState('');
   const [alertaRls, setAlertaRls] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [copiadoSqlBorrar, setCopiadoSqlBorrar] = useState(false);
+
+  const [cedulaABorrar, setCedulaABorrar] = useState('');
+  const [mensajeRanking, setMensajeRanking] = useState('');
+  const [borrandoRanking, setBorrandoRanking] = useState(false);
 
   const [metricas, setMetricas] = useState({
     totalJugadores: 0,
@@ -199,12 +206,78 @@ DROP POLICY IF EXISTS "Permitir actualizar evento" ON public.evento;
 CREATE POLICY "Permitir actualizar evento" ON public.evento 
     FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);`;
 
+  const sqlBorrarCode = `-- 1. Borrar todas las partidas y reiniciar el ranking:
+TRUNCATE TABLE public.partida RESTART IDENTITY;
+TRUNCATE TABLE public.usuario_intentos RESTART IDENTITY;
+
+-- 2. O borrar a un colaborador específico (ejemplo con cédula):
+-- DELETE FROM public.partida WHERE cedula = '1085268734';
+-- DELETE FROM public.usuario_intentos WHERE cedula = '1085268734';
+
+-- 3. Habilitar DELETE directamente desde la vista ranking:
+CREATE OR REPLACE FUNCTION public.eliminar_ranking_trigger()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER AS $$
+BEGIN
+    DELETE FROM public.partida WHERE cedula = OLD.cedula;
+    DELETE FROM public.usuario_intentos WHERE cedula = OLD.cedula;
+    RETURN OLD;
+END;
+$$;
+DROP TRIGGER IF EXISTS ranking_delete_trg ON public.ranking;
+CREATE TRIGGER ranking_delete_trg INSTEAD OF DELETE ON public.ranking
+FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
+
   const handleCopiarSql = () => {
     sfx.clic();
     navigator.clipboard.writeText(sqlCode).then(() => {
       setCopiado(true);
       setTimeout(() => setCopiado(false), 3000);
     });
+  };
+
+  const handleCopiarSqlBorrar = () => {
+    sfx.clic();
+    navigator.clipboard.writeText(sqlBorrarCode).then(() => {
+      setCopiadoSqlBorrar(true);
+      setTimeout(() => setCopiadoSqlBorrar(false), 3000);
+    });
+  };
+
+  const handleEliminarPorCedula = async (e) => {
+    if (e) e.preventDefault();
+    sfx.clic();
+    const ced = String(cedulaABorrar).replace(/\D/g, '').trim();
+    if (!ced) {
+      setMensajeRanking('Ingresa una cédula válida.');
+      return;
+    }
+    const ok = window.confirm(`¿Seguro que deseas eliminar al colaborador con cédula ${ced} del ranking?\n\nEsto borrará su puntaje registrado y le permitirá volver a jugar sus 2 intentos.`);
+    if (!ok) return;
+
+    setBorrandoRanking(true);
+    setMensajeRanking('');
+    const res = await eliminarJugadorRanking(ced, session?.token);
+    setBorrandoRanking(false);
+    setCedulaABorrar('');
+    setMensajeRanking(res.msg);
+
+    // Recargar métricas
+    obtenerMetricasAdmin(session?.token).then(setMetricas).catch(() => {});
+  };
+
+  const handleVaciarTodoRanking = async () => {
+    sfx.clic();
+    const ok = window.confirm('⚠️ ADVERTENCIA: ¿Estás completamente seguro de BORRAR TODO EL RANKING?\n\nEsta acción borrará todas las partidas registradas y permitirá a todos los participantes jugar nuevamente desde cero.');
+    if (!ok) return;
+
+    setBorrandoRanking(true);
+    setMensajeRanking('');
+    const res = await limpiarTodoRanking(session?.token);
+    setBorrandoRanking(false);
+    setMensajeRanking(res.msg);
+
+    // Recargar métricas
+    obtenerMetricasAdmin(session?.token).then(setMetricas).catch(() => {});
   };
 
   return (
@@ -457,6 +530,109 @@ CREATE POLICY "Permitir actualizar evento" ON public.evento
                     🏆 Récord ({metricas.mejorJugador?.nombre ? metricas.mejorJugador.nombre.split(' ')[0] : 'Sin partidas'})
                   </span>
                 </div>
+              </div>
+            </div>
+
+            {/* Tarjeta 4: Gestión y Limpieza del Ranking */}
+            <div className="admin-card" style={{ border: '1px solid rgba(239, 83, 80, 0.5)' }}>
+              <div className="admin-card-titulo">
+                <span>🗑️ Gestión y Borrado de Ranking</span>
+              </div>
+              <p className="admin-ayuda-txt">
+                Elimina registros de partidas para corregir puntajes o permitir que colaboradores específicos vuelvan a jugar sus intentos:
+              </p>
+
+              {/* Borrar por cédula */}
+              <form onSubmit={handleEliminarPorCedula} style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '10px 0' }}>
+                <input
+                  type="text"
+                  placeholder="Cédula a eliminar (ej: 1085268734)"
+                  value={cedulaABorrar}
+                  onChange={(e) => setCedulaABorrar(e.target.value)}
+                  style={{
+                    flex: '1',
+                    minWidth: '220px',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255, 244, 224, 0.3)',
+                    background: '#150f2e',
+                    color: '#fff',
+                    fontSize: '0.92rem'
+                  }}
+                  disabled={borrandoRanking}
+                />
+                <button
+                  type="submit"
+                  disabled={borrandoRanking || !cedulaABorrar.trim()}
+                  style={{
+                    background: '#d32f2f',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '8px 16px',
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  {borrandoRanking ? 'Eliminando…' : '🗑️ Eliminar Cédula'}
+                </button>
+              </form>
+
+              {/* Botón para vaciar todo el ranking */}
+              <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed rgba(255, 244, 224, 0.15)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <span style={{ fontSize: '0.88rem', color: '#ffcdd2' }}>
+                  ¿Deseas reiniciar la competencia completa?
+                </span>
+                <button
+                  type="button"
+                  onClick={handleVaciarTodoRanking}
+                  disabled={borrandoRanking}
+                  style={{
+                    background: 'rgba(239, 83, 80, 0.2)',
+                    border: '1px solid #ef5350',
+                    color: '#ffcdd2',
+                    borderRadius: '8px',
+                    padding: '8px 14px',
+                    fontWeight: 800,
+                    fontSize: '0.86rem',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ⚠️ Vaciar Todo el Ranking
+                </button>
+              </div>
+
+              {mensajeRanking && (
+                <div style={{ marginTop: '10px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(61, 220, 132, 0.15)', border: '1px solid #3ddc84', color: '#b9f6ca', fontSize: '0.88rem' }}>
+                  {mensajeRanking}
+                </div>
+              )}
+
+              {/* Snippet SQL para ejecutar directamente en Supabase si se prefiere */}
+              <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255, 244, 224, 0.1)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--crema-suave)', fontWeight: 700 }}>
+                    💡 O ejecuta esto en el SQL Editor de Supabase:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopiarSqlBorrar}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.25)',
+                      color: '#fff',
+                      borderRadius: '6px',
+                      padding: '4px 8px',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {copiadoSqlBorrar ? '✅ Copiado' : '📋 Copiar SQL'}
+                  </button>
+                </div>
+                <pre style={{ margin: 0, padding: '10px', background: '#120d28', borderRadius: '8px', fontSize: '0.78rem', color: '#80cbc4', overflowX: 'auto', maxHeight: '110px' }}>
+                  <code>{sqlBorrarCode}</code>
+                </pre>
               </div>
             </div>
 

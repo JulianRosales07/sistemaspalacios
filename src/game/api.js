@@ -1,5 +1,13 @@
 import { CONFIG, DEPARTAMENTOS_OFICIALES, K_EVENTO, DIFS } from './constants.js';
-import { getLocalRanking, guardarLocalRanking, cargarPerfil, perfilVacio } from './storage.js';
+import {
+  getLocalRanking,
+  guardarLocalRanking,
+  eliminarDeLocalRanking,
+  limpiarLocalRanking,
+  resetearIntentosLocal,
+  cargarPerfil,
+  perfilVacio
+} from './storage.js';
 import { backendService } from './backendService.js';
 
 function ruta(o, p) {
@@ -579,6 +587,82 @@ export async function obtenerRankingAreas(token) {
   } catch (e) {
     return { lista: localAreasFromLocalScores(), origen: 'error' };
   }
+}
+
+/**
+ * Eliminar a un jugador específico del ranking y restablecer sus intentos
+ */
+export async function eliminarJugadorRanking(cedula, token) {
+  if (!cedula) return { ok: false, msg: 'Cédula no proporcionada.' };
+  const ced = String(cedula).trim();
+  const hdrs = cabecerasAPI(token);
+
+  // 1. Limpieza local inmediata
+  eliminarDeLocalRanking(ced);
+  resetearIntentosLocal(ced);
+  backendService.deleteUser(ced);
+
+  // 2. Limpieza en Supabase
+  let supaOk = false;
+  if (CONFIG.RESULTADOS_URL) {
+    try {
+      const urlPartida = `${CONFIG.RESULTADOS_URL}?cedula=eq.${encodeURIComponent(ced)}`;
+      const r1 = await fetch(urlPartida, { method: 'DELETE', headers: hdrs }).catch(() => null);
+      if (r1 && r1.ok) supaOk = true;
+
+      if (CONFIG.USUARIO_INTENTOS_URL) {
+        const urlIntentos = `${CONFIG.USUARIO_INTENTOS_URL}?cedula=eq.${encodeURIComponent(ced)}`;
+        await fetch(urlIntentos, { method: 'DELETE', headers: hdrs }).catch(() => null);
+      }
+
+      if (CONFIG.RANKING_URL) {
+        const urlRanking = CONFIG.RANKING_URL.split('?')[0] + `?cedula=eq.${encodeURIComponent(ced)}`;
+        await fetch(urlRanking, { method: 'DELETE', headers: hdrs }).catch(() => null);
+      }
+    } catch (e) {
+      console.warn('Error al eliminar en Supabase:', e);
+    }
+  }
+
+  return {
+    ok: true,
+    supaOk,
+    msg: `El registro de la cédula ${ced} fue eliminado del ranking y sus intentos fueron restablecidos.`
+  };
+}
+
+/**
+ * Limpiar todo el ranking y restablecer partidas
+ */
+export async function limpiarTodoRanking(token) {
+  const hdrs = cabecerasAPI(token);
+
+  // 1. Limpieza local
+  limpiarLocalRanking();
+  backendService.resetRanking();
+
+  // 2. Limpieza en Supabase
+  let supaOk = false;
+  if (CONFIG.RESULTADOS_URL) {
+    try {
+      const urlPartida = `${CONFIG.RESULTADOS_URL}?id=gt.0`;
+      const r1 = await fetch(urlPartida, { method: 'DELETE', headers: hdrs }).catch(() => null);
+      if (r1 && r1.ok) supaOk = true;
+
+      if (CONFIG.USUARIO_INTENTOS_URL) {
+        const urlIntentos = `${CONFIG.USUARIO_INTENTOS_URL}?id=gt.0`;
+        await fetch(urlIntentos, { method: 'DELETE', headers: hdrs }).catch(() => null);
+      }
+    } catch (e) {
+      console.warn('Error al vaciar ranking en Supabase:', e);
+    }
+  }
+
+  return {
+    ok: true,
+    supaOk,
+    msg: 'Se ha reiniciado el ranking completamente.'
+  };
 }
 
 export async function obtenerDepartamentosAPI() {

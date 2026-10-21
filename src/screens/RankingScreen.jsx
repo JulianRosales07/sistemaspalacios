@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import WoodButton from '../components/WoodButton';
-import { DIFS, DEPARTAMENTOS_OFICIALES } from '../game/constants';
+import { DIFS, DEPARTAMENTOS_OFICIALES, esAdmin } from '../game/constants';
 import { num } from '../game/canvasUtils';
-import { obtenerRankingJugadores, obtenerRankingAreas, obtenerDepartamentosAPI } from '../game/api';
+import {
+  obtenerRankingJugadores,
+  obtenerRankingAreas,
+  obtenerDepartamentosAPI,
+  eliminarJugadorRanking,
+  limpiarTodoRanking
+} from '../game/api';
 import { sfx } from '../game/audio';
 
 export default function RankingScreen({ session, onBackToMenu }) {
@@ -14,6 +20,7 @@ export default function RankingScreen({ session, onBackToMenu }) {
   // Inicializar inmediatamente con la lista oficial completa de departamentos
   const [deptosAPI, setDeptosAPI] = useState(DEPARTAMENTOS_OFICIALES);
   const [estadoTxt, setEstadoTxt] = useState('');
+  const admin = esAdmin(session?.cedula);
 
   const cargarDatos = useCallback(async () => {
     setCargando(true);
@@ -120,6 +127,29 @@ export default function RankingScreen({ session, onBackToMenu }) {
     setTab('jugadores');
   };
 
+  const handleEliminarJugador = async (jugador) => {
+    sfx.clic();
+    const nombre = jugador.nombre || 'este colaborador';
+    const ced = jugador.cedula;
+    if (!ced) return;
+    const ok = window.confirm(`¿Deseas eliminar a ${nombre} (Cédula: ${ced}) del ranking?\n\nAl borrarlo, su puntaje saldrá de la tabla y podrá volver a jugar sus 2 intentos.`);
+    if (ok) {
+      setCargando(true);
+      await eliminarJugadorRanking(ced, session?.token);
+      await cargarDatos();
+    }
+  };
+
+  const handleLimpiarTodo = async () => {
+    sfx.clic();
+    const ok = window.confirm('⚠️ ¿Estás seguro de que deseas BORRAR TODO EL RANKING?\n\nEsta acción eliminará todas las partidas y puntajes de todos los colaboradores, permitiendo reiniciar el torneo.');
+    if (ok) {
+      setCargando(true);
+      await limpiarTodoRanking(session?.token);
+      await cargarDatos();
+    }
+  };
+
   // Render podio para jugadores
   const renderPodio = (lista) => {
     if (!lista || lista.length === 0) return null;
@@ -145,7 +175,7 @@ export default function RankingScreen({ session, onBackToMenu }) {
             );
           }
           return (
-            <div key={visualIdx} className={`puesto p${posNum}`}>
+            <div key={visualIdx} className={`puesto p${posNum}`} style={{ position: 'relative' }}>
               <div className="medalla" aria-hidden="true">
                 {medallas[posIdx]}
               </div>
@@ -155,6 +185,31 @@ export default function RankingScreen({ session, onBackToMenu }) {
               </b>
               <small>{x.area ? areaDe(x) : nombreDif(x.dificultad)}</small>
               <div className="puesto-base">{num(puntosDe(x))}</div>
+              {admin && x.cedula && (
+                <button
+                  type="button"
+                  onClick={() => handleEliminarJugador(x)}
+                  title={`Eliminar a ${x.nombre || x.cedula} del ranking`}
+                  style={{
+                    position: 'absolute',
+                    top: '4px',
+                    right: '4px',
+                    background: 'rgba(239, 83, 80, 0.85)',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '24px',
+                    height: '24px',
+                    color: '#fff',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  🗑️
+                </button>
+              )}
             </div>
           );
         })}
@@ -191,6 +246,25 @@ export default function RankingScreen({ session, onBackToMenu }) {
               </small>
             </span>
             <b className="pts">{num(puntosDe(x))}</b>
+            {admin && x.cedula && (
+              <button
+                type="button"
+                onClick={() => handleEliminarJugador(x)}
+                title={`Eliminar a ${x.nombre || x.cedula} del ranking`}
+                style={{
+                  background: 'rgba(239, 83, 80, 0.25)',
+                  border: '1px solid rgba(239, 83, 80, 0.6)',
+                  color: '#ffcdd2',
+                  borderRadius: '6px',
+                  padding: '4px 8px',
+                  marginLeft: '8px',
+                  cursor: 'pointer',
+                  fontSize: '0.85rem'
+                }}
+              >
+                🗑️
+              </button>
+            )}
           </li>
         ))}
       </ol>
@@ -352,6 +426,45 @@ export default function RankingScreen({ session, onBackToMenu }) {
         >
           🏆 <b>Regla de clasificación:</b> El ranking oficial se determina <b>exclusivamente con el puntaje del 2º intento</b>. El 1º intento es de práctica y no suma al ranking.
         </div>
+
+        {/* Barra de administración si es SUPER ADMIN */}
+        {admin && (
+          <div
+            style={{
+              background: 'rgba(239, 83, 80, 0.15)',
+              border: '1px solid rgba(239, 83, 80, 0.5)',
+              borderRadius: '10px',
+              padding: '10px 14px',
+              margin: '8px auto 14px auto',
+              maxWidth: '520px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '10px',
+              flexWrap: 'wrap'
+            }}
+          >
+            <div style={{ fontSize: '0.84rem', color: '#ffcdd2', textAlign: 'left' }}>
+              👑 <b>Panel Administrador:</b> Puedes borrar jugadores con el icono 🗑️ o vaciar la tabla.
+            </div>
+            <button
+              type="button"
+              onClick={handleLimpiarTodo}
+              style={{
+                background: '#d32f2f',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '8px',
+                padding: '6px 12px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                cursor: 'pointer'
+              }}
+            >
+              ⚠️ Vaciar Todo el Ranking
+            </button>
+          </div>
+        )}
 
         {/* Filtro de Departamento en pestaña Jugadores */}
         {tab === 'jugadores' && (
