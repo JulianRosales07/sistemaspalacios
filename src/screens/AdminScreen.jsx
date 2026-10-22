@@ -10,6 +10,7 @@ import {
   limpiarTodoRanking
 } from '../game/api';
 import { exportarRankingPDF } from '../game/exportRankingPdf';
+import { exportarRankingExcel } from '../game/exportRankingExcel';
 import logoImg from '../assets/logo.webp';
 import { num } from '../game/canvasUtils';
 import { sfx } from '../game/audio';
@@ -56,6 +57,9 @@ export default function AdminScreen({
 
   const [exportandoPdf, setExportandoPdf] = useState(false);
   const [mensajePdf, setMensajePdf] = useState('');
+
+  const [exportandoExcel, setExportandoExcel] = useState(false);
+  const [mensajeExcel, setMensajeExcel] = useState('');
 
   const [metricas, setMetricas] = useState({
     totalJugadores: 0,
@@ -301,6 +305,25 @@ FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
       setMensajePdf('❌ Error al exportar ranking: ' + (err.message || 'Error inesperado'));
     } finally {
       setExportandoPdf(false);
+    }
+  };
+
+  const handleExportarExcel = async () => {
+    sfx.clic();
+    setExportandoExcel(true);
+    setMensajeExcel('');
+    try {
+      const res = await exportarRankingExcel({ session, eventoData: evento });
+      if (res?.ok) {
+        setMensajeExcel(`✅ ¡Archivo Excel (.xlsx) descargado exitosamente! Incluye 4 hojas de cálculo con ${res.totalParticipantes} colaboradores y el ganador de cada departamento.`);
+      } else {
+        setMensajeExcel('No se pudo generar el archivo Excel.');
+      }
+    } catch (err) {
+      console.error('Error al exportar ranking a Excel:', err);
+      setMensajeExcel('❌ Error al exportar ranking a Excel: ' + (err.message || 'Error inesperado'));
+    } finally {
+      setExportandoExcel(false);
     }
   };
 
@@ -650,7 +673,7 @@ FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
                 <button
                   type="button"
                   onClick={handleExportarPDF}
-                  disabled={exportandoPdf}
+                  disabled={exportandoPdf || exportandoExcel}
                   style={{
                     background: exportandoPdf
                       ? 'rgba(217, 119, 6, 0.5)'
@@ -658,10 +681,10 @@ FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
                     color: '#fff',
                     border: 'none',
                     borderRadius: '8px',
-                    padding: '10px 20px',
+                    padding: '10px 18px',
                     fontWeight: 800,
                     fontSize: '0.92rem',
-                    cursor: exportandoPdf ? 'not-allowed' : 'pointer',
+                    cursor: exportandoPdf || exportandoExcel ? 'not-allowed' : 'pointer',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '8px',
@@ -669,12 +692,37 @@ FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
                     transition: 'transform 0.15s ease'
                   }}
                 >
-                  <span>{exportandoPdf ? '⏳ Generando documento PDF…' : '📥 Descargar Reporte Completo en PDF'}</span>
+                  <span>{exportandoPdf ? '⏳ Generando PDF…' : '📄 Descargar Reporte en PDF'}</span>
                 </button>
 
-                {exportandoPdf && (
+                <button
+                  type="button"
+                  onClick={handleExportarExcel}
+                  disabled={exportandoExcel || exportandoPdf}
+                  style={{
+                    background: exportandoExcel
+                      ? 'rgba(16, 185, 129, 0.5)'
+                      : 'linear-gradient(135deg, #059669, #047857)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '10px 18px',
+                    fontWeight: 800,
+                    fontSize: '0.92rem',
+                    cursor: exportandoExcel || exportandoPdf ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 12px rgba(5, 150, 105, 0.35)',
+                    transition: 'transform 0.15s ease'
+                  }}
+                >
+                  <span>{exportandoExcel ? '⏳ Generando Excel…' : '📊 Descargar Reporte en Excel (.xlsx)'}</span>
+                </button>
+
+                {(exportandoPdf || exportandoExcel) && (
                   <span style={{ fontSize: '0.82rem', color: '#fcd34d' }}>
-                    Estructurando páginas y tablas...
+                    Procesando rankings y calculando ganadores...
                   </span>
                 )}
               </div>
@@ -694,6 +742,24 @@ FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
                   }}
                 >
                   {mensajePdf}
+                </div>
+              )}
+
+              {mensajeExcel && (
+                <div
+                  style={{
+                    marginTop: '10px',
+                    padding: '9px 13px',
+                    borderRadius: '8px',
+                    background: mensajeExcel.startsWith('✅')
+                      ? 'rgba(16, 185, 129, 0.15)'
+                      : 'rgba(239, 83, 80, 0.15)',
+                    border: `1px solid ${mensajeExcel.startsWith('✅') ? '#10b981' : '#ef5350'}`,
+                    color: mensajeExcel.startsWith('✅') ? '#a7f3d0' : '#ffcdd2',
+                    fontSize: '0.88rem'
+                  }}
+                >
+                  {mensajeExcel}
                 </div>
               )}
             </div>
@@ -834,9 +900,17 @@ FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
                   color="t-naranja"
                   chica
                   onClick={handleExportarPDF}
-                  disabled={exportandoPdf}
+                  disabled={exportandoPdf || exportandoExcel}
                 >
                   {exportandoPdf ? '⏳ Generando…' : '📄 Exportar PDF'}
+                </WoodButton>
+                <WoodButton
+                  color="t-verde"
+                  chica
+                  onClick={handleExportarExcel}
+                  disabled={exportandoExcel || exportandoPdf}
+                >
+                  {exportandoExcel ? '⏳ Generando…' : '📊 Exportar Excel'}
                 </WoodButton>
               </div>
             </div>

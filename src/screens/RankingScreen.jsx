@@ -10,6 +10,7 @@ import {
   limpiarTodoRanking
 } from '../game/api';
 import { exportarRankingPDF } from '../game/exportRankingPdf';
+import { exportarRankingExcel } from '../game/exportRankingExcel';
 import logoImg from '../assets/logo.webp';
 import { sfx } from '../game/audio';
 
@@ -24,6 +25,8 @@ export default function RankingScreen({ session, onBackToMenu }) {
   const [estadoTxt, setEstadoTxt] = useState('');
   const [exportandoPdf, setExportandoPdf] = useState(false);
   const [mensajePdf, setMensajePdf] = useState('');
+  const [exportandoExcel, setExportandoExcel] = useState(false);
+  const [mensajeExcel, setMensajeExcel] = useState('');
   const admin = esAdmin(session?.cedula);
 
   const cargarDatos = useCallback(async () => {
@@ -175,6 +178,29 @@ export default function RankingScreen({ session, onBackToMenu }) {
       alert('Error al generar el PDF: ' + (err.message || 'Error inesperado'));
     } finally {
       setExportandoPdf(false);
+    }
+  };
+
+  const handleExportarExcel = async () => {
+    sfx.clic();
+    setExportandoExcel(true);
+    setMensajeExcel('');
+    try {
+      const res = await exportarRankingExcel({
+        session,
+        jugadoresData: jugadores,
+        areasData: areas,
+        deptosData: listaDeptos
+      });
+      if (res?.ok) {
+        setMensajeExcel(`✅ ¡Archivo Excel descargado! (${res.totalParticipantes} colaboradores, 4 hojas con ganadores)`);
+        setTimeout(() => setMensajeExcel(''), 6000);
+      }
+    } catch (err) {
+      console.error('Error al exportar Excel:', err);
+      alert('Error al generar el Excel: ' + (err.message || 'Error inesperado'));
+    } finally {
+      setExportandoExcel(false);
     }
   };
 
@@ -521,6 +547,28 @@ export default function RankingScreen({ session, onBackToMenu }) {
 
               <button
                 type="button"
+                onClick={handleExportarExcel}
+                disabled={exportandoExcel || exportandoPdf}
+                style={{
+                  background: exportandoExcel ? 'rgba(16, 185, 129, 0.5)' : 'linear-gradient(135deg, #059669, #047857)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '6px 14px',
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  cursor: exportandoExcel || exportandoPdf ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)'
+                }}
+              >
+                <span>{exportandoExcel ? '⏳ Generando…' : '📊 Exportar Excel'}</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleLimpiarTodo}
                 style={{
                   background: '#d32f2f',
@@ -552,6 +600,24 @@ export default function RankingScreen({ session, onBackToMenu }) {
                 }}
               >
                 {mensajePdf}
+              </div>
+            )}
+
+            {mensajeExcel && (
+              <div
+                style={{
+                  width: '100%',
+                  marginTop: '6px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  border: '1px solid #10b981',
+                  color: '#a7f3d0',
+                  fontSize: '0.82rem',
+                  textAlign: 'center'
+                }}
+              >
+                {mensajeExcel}
               </div>
             )}
           </div>
