@@ -10,6 +10,7 @@ import {
   limpiarTodoRanking
 } from '../game/api';
 import { exportarRankingPDF } from '../game/exportRankingPdf';
+import logoImg from '../assets/logo.webp';
 import { sfx } from '../game/audio';
 
 export default function RankingScreen({ session, onBackToMenu }) {
@@ -162,7 +163,8 @@ export default function RankingScreen({ session, onBackToMenu }) {
         session,
         jugadoresData: jugadores,
         areasData: areas,
-        deptosData: listaDeptos
+        deptosData: listaDeptos,
+        logoUrl: logoImg
       });
       if (res?.ok) {
         setMensajePdf(`✅ ¡Reporte PDF descargado! (${res.totalPaginas} págs, ${res.totalParticipantes} jugadores)`);
@@ -209,6 +211,22 @@ export default function RankingScreen({ session, onBackToMenu }) {
                 {x.nombre || 'Colaborador'}
                 {esYo(x) ? ' (tú)' : ''}
               </b>
+              {deptoFiltro !== 'TODOS' && posNum === 1 && (
+                <div style={{ marginTop: '2px' }}>
+                  <span style={{
+                    background: 'rgba(217, 119, 6, 0.35)',
+                    border: '1px solid #f59e0b',
+                    color: '#fcd34d',
+                    fontSize: '0.7rem',
+                    fontWeight: 800,
+                    padding: '1px 6px',
+                    borderRadius: '4px',
+                    display: 'inline-block'
+                  }}>
+                    👑 ¡Ganador(a) del Área!
+                  </span>
+                </div>
+              )}
               <small>{x.area ? areaDe(x) : nombreDif(x.dificultad)}</small>
               <div className="puesto-base">{num(puntosDe(x))}</div>
               {admin && x.cedula && (
@@ -361,6 +379,11 @@ export default function RankingScreen({ session, onBackToMenu }) {
             const part = +(x.participantes || 0);
             const esMiDepto = miArea && areaDe(x).toLowerCase() === miArea;
 
+            const jgsArea = jugadores.filter(
+              (j) => String(j.area || '').trim().toLowerCase() === areaDe(x).toLowerCase()
+            );
+            const liderArea = jgsArea.length > 0 ? jgsArea[0] : null;
+
             return (
               <li
                 key={i}
@@ -376,7 +399,7 @@ export default function RankingScreen({ session, onBackToMenu }) {
                   <b>{areaDe(x)}</b>
                   <small>
                     {part} {part === 1 ? 'participante' : 'participantes'}
-                    {x.mejor != null ? `, récord ${num(x.mejor)}` : ''}
+                    {liderArea ? ` • 👑 Ganador(a): ${liderArea.nombre} (${num(puntosDe(liderArea))} pts)` : ''}
                   </small>
                   <span className="barra" aria-hidden="true">
                     <i style={{ width: `${Math.round((prom / max) * 100)}%` }} />
@@ -590,11 +613,28 @@ export default function RankingScreen({ session, onBackToMenu }) {
             </div>
 
             {deptoFiltro !== 'TODOS' && (
-              <div className="rk-filtro-activo">
+              <div
+                className="rk-filtro-activo"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  background: 'rgba(217, 119, 6, 0.15)',
+                  border: '1px solid rgba(217, 119, 6, 0.45)',
+                  padding: '8px 12px',
+                  borderRadius: '8px'
+                }}
+              >
                 <span>
                   Mostrando ranking de <b>{deptoFiltro}</b> ({jugadoresFiltrados.length}{' '}
                   {jugadoresFiltrados.length === 1 ? 'jugador' : 'jugadores'})
                 </span>
+                {jugadoresFiltrados.length > 0 && (
+                  <span style={{ color: '#fcd34d', fontWeight: 800, fontSize: '0.86rem' }}>
+                    👑 <b>Ganador(a) del departamento:</b> {jugadoresFiltrados[0].nombre} con{' '}
+                    {num(puntosDe(jugadoresFiltrados[0]))} puntos
+                  </span>
+                )}
               </div>
             )}
           </div>

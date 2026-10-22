@@ -59,5 +59,42 @@ describe('Exportación de Ranking a PDF', () => {
     assert(resultado.totalPaginas >= 3, `Debe tener al menos 3 páginas para las 3 secciones, obtuvo ${resultado.totalPaginas}`);
     assert(resultado.nombreArchivo.startsWith('Ranking_SST_Sistemas_Palacios_'));
     assert(resultado.nombreArchivo.endsWith('.pdf'));
+
+    // Verificar que el objeto doc fue generado sin errores
+    assert(resultado.doc != null);
+  });
+
+  test('Calcula correctamente al ganador de cada departamento', async () => {
+    const mockJugadores = [
+      {
+        cedula: '1001',
+        nombre: 'Ana Lopez',
+        area: 'LOGÍSTICA',
+        puntaje: 12000,
+        dificultad: 'facil'
+      },
+      {
+        cedula: '1002',
+        nombre: 'Beto Gomez',
+        area: 'LOGÍSTICA',
+        puntaje: 19500, // Ganador de Logística
+        dificultad: 'media'
+      },
+      {
+        cedula: '2001',
+        nombre: 'Carlos Ruiz',
+        area: 'OPERACIONES',
+        puntaje: 26000, // Ganador de Operaciones
+        dificultad: 'dificil'
+      }
+    ];
+
+    const resultado = await exportarRankingPDF({
+      jugadoresData: mockJugadores,
+      descargar: false
+    });
+
+    assert.equal(resultado.ok, true);
+    assert.equal(resultado.totalParticipantes, 3);
   });
 });

@@ -10,6 +10,7 @@ import {
   limpiarTodoRanking
 } from '../game/api';
 import { exportarRankingPDF } from '../game/exportRankingPdf';
+import logoImg from '../assets/logo.webp';
 import { num } from '../game/canvasUtils';
 import { sfx } from '../game/audio';
 
@@ -289,7 +290,7 @@ FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
     setExportandoPdf(true);
     setMensajePdf('');
     try {
-      const res = await exportarRankingPDF({ session, eventoData: evento });
+      const res = await exportarRankingPDF({ session, eventoData: evento, logoUrl: logoImg });
       if (res?.ok) {
         setMensajePdf(`✅ ¡Reporte oficial descargado exitosamente! Documento de ${res.totalPaginas} páginas con ${res.totalParticipantes} colaboradores registrados en los rankings.`);
       } else {
