@@ -315,7 +315,7 @@ FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
     try {
       const res = await exportarRankingExcel({ session, eventoData: evento });
       if (res?.ok) {
-        setMensajeExcel(`✅ ¡Archivo Excel (.xlsx) descargado exitosamente! Incluye 4 hojas de cálculo con ${res.totalParticipantes} colaboradores y el ganador de cada departamento.`);
+        setMensajeExcel(`✅ ¡Archivo Excel (.xlsx) descargado exitosamente! Tabla con los ${res.totalGanadores} ganadores departamentales (Nombre, Cargo, Puntaje, Departamento).`);
       } else {
         setMensajeExcel('No se pudo generar el archivo Excel.');
       }
@@ -717,7 +717,7 @@ FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
                     transition: 'transform 0.15s ease'
                   }}
                 >
-                  <span>{exportandoExcel ? '⏳ Generando Excel…' : '📊 Descargar Reporte en Excel (.xlsx)'}</span>
+                  <span>{exportandoExcel ? '⏳ Generando Excel…' : '📊 Descargar Ganadores por Depto (Excel)'}</span>
                 </button>
 
                 {(exportandoPdf || exportandoExcel) && (

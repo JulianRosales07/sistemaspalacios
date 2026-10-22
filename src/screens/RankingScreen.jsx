@@ -193,7 +193,7 @@ export default function RankingScreen({ session, onBackToMenu }) {
         deptosData: listaDeptos
       });
       if (res?.ok) {
-        setMensajeExcel(`✅ ¡Archivo Excel descargado! (${res.totalParticipantes} colaboradores, 4 hojas con ganadores)`);
+        setMensajeExcel(`✅ ¡Excel de Ganadores descargado! (${res.totalGanadores} ganadores con Nombre, Cargo, Puntaje y Depto)`);
         setTimeout(() => setMensajeExcel(''), 6000);
       }
     } catch (err) {
