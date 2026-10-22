@@ -9,6 +9,7 @@ import {
   eliminarJugadorRanking,
   limpiarTodoRanking
 } from '../game/api';
+import { exportarRankingPDF } from '../game/exportRankingPdf';
 import { sfx } from '../game/audio';
 
 export default function RankingScreen({ session, onBackToMenu }) {
@@ -20,6 +21,8 @@ export default function RankingScreen({ session, onBackToMenu }) {
   // Inicializar inmediatamente con la lista oficial completa de departamentos
   const [deptosAPI, setDeptosAPI] = useState(DEPARTAMENTOS_OFICIALES);
   const [estadoTxt, setEstadoTxt] = useState('');
+  const [exportandoPdf, setExportandoPdf] = useState(false);
+  const [mensajePdf, setMensajePdf] = useState('');
   const admin = esAdmin(session?.cedula);
 
   const cargarDatos = useCallback(async () => {
@@ -147,6 +150,29 @@ export default function RankingScreen({ session, onBackToMenu }) {
       setCargando(true);
       await limpiarTodoRanking(session?.token);
       await cargarDatos();
+    }
+  };
+
+  const handleExportarPDF = async () => {
+    sfx.clic();
+    setExportandoPdf(true);
+    setMensajePdf('');
+    try {
+      const res = await exportarRankingPDF({
+        session,
+        jugadoresData: jugadores,
+        areasData: areas,
+        deptosData: listaDeptos
+      });
+      if (res?.ok) {
+        setMensajePdf(`✅ ¡Reporte PDF descargado! (${res.totalPaginas} págs, ${res.totalParticipantes} jugadores)`);
+        setTimeout(() => setMensajePdf(''), 6000);
+      }
+    } catch (err) {
+      console.error('Error al exportar PDF:', err);
+      alert('Error al generar el PDF: ' + (err.message || 'Error inesperado'));
+    } finally {
+      setExportandoPdf(false);
     }
   };
 
@@ -431,8 +457,8 @@ export default function RankingScreen({ session, onBackToMenu }) {
         {admin && (
           <div
             style={{
-              background: 'rgba(239, 83, 80, 0.15)',
-              border: '1px solid rgba(239, 83, 80, 0.5)',
+              background: 'rgba(34, 27, 71, 0.75)',
+              border: '1.5px solid rgba(217, 119, 6, 0.4)',
               borderRadius: '10px',
               padding: '10px 14px',
               margin: '8px auto 14px auto',
@@ -444,25 +470,67 @@ export default function RankingScreen({ session, onBackToMenu }) {
               flexWrap: 'wrap'
             }}
           >
-            <div style={{ fontSize: '0.84rem', color: '#ffcdd2', textAlign: 'left' }}>
-              👑 <b>Panel Administrador:</b> Puedes borrar jugadores con el icono 🗑️ o vaciar la tabla.
+            <div style={{ fontSize: '0.84rem', color: '#fcd34d', textAlign: 'left', flex: '1', minWidth: '180px' }}>
+              👑 <b>Panel Administrador:</b> Exporta el reporte o gestiona la tabla.
             </div>
-            <button
-              type="button"
-              onClick={handleLimpiarTodo}
-              style={{
-                background: '#d32f2f',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '6px 12px',
-                fontWeight: 800,
-                fontSize: '0.82rem',
-                cursor: 'pointer'
-              }}
-            >
-              ⚠️ Vaciar Todo el Ranking
-            </button>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={handleExportarPDF}
+                disabled={exportandoPdf}
+                style={{
+                  background: exportandoPdf ? 'rgba(217, 119, 6, 0.5)' : 'linear-gradient(135deg, #d97706, #b45309)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '6px 14px',
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  cursor: exportandoPdf ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  boxShadow: '0 2px 8px rgba(217, 119, 6, 0.3)'
+                }}
+              >
+                <span>{exportandoPdf ? '⏳ Generando…' : '📄 Exportar PDF'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLimpiarTodo}
+                style={{
+                  background: '#d32f2f',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  fontWeight: 800,
+                  fontSize: '0.82rem',
+                  cursor: 'pointer'
+                }}
+              >
+                ⚠️ Vaciar Ranking
+              </button>
+            </div>
+
+            {mensajePdf && (
+              <div
+                style={{
+                  width: '100%',
+                  marginTop: '6px',
+                  padding: '6px 10px',
+                  borderRadius: '6px',
+                  background: 'rgba(61, 220, 132, 0.15)',
+                  border: '1px solid #3ddc84',
+                  color: '#b9f6ca',
+                  fontSize: '0.82rem',
+                  textAlign: 'center'
+                }}
+              >
+                {mensajePdf}
+              </div>
+            )}
           </div>
         )}
 

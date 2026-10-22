@@ -9,6 +9,7 @@ import {
   eliminarJugadorRanking,
   limpiarTodoRanking
 } from '../game/api';
+import { exportarRankingPDF } from '../game/exportRankingPdf';
 import { num } from '../game/canvasUtils';
 import { sfx } from '../game/audio';
 
@@ -51,6 +52,9 @@ export default function AdminScreen({
   const [cedulaABorrar, setCedulaABorrar] = useState('');
   const [mensajeRanking, setMensajeRanking] = useState('');
   const [borrandoRanking, setBorrandoRanking] = useState(false);
+
+  const [exportandoPdf, setExportandoPdf] = useState(false);
+  const [mensajePdf, setMensajePdf] = useState('');
 
   const [metricas, setMetricas] = useState({
     totalJugadores: 0,
@@ -278,6 +282,25 @@ FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
 
     // Recargar métricas
     obtenerMetricasAdmin(session?.token).then(setMetricas).catch(() => {});
+  };
+
+  const handleExportarPDF = async () => {
+    sfx.clic();
+    setExportandoPdf(true);
+    setMensajePdf('');
+    try {
+      const res = await exportarRankingPDF({ session, eventoData: evento });
+      if (res?.ok) {
+        setMensajePdf(`✅ ¡Reporte oficial descargado exitosamente! Documento de ${res.totalPaginas} páginas con ${res.totalParticipantes} colaboradores registrados en los rankings.`);
+      } else {
+        setMensajePdf('No se pudo generar el documento PDF.');
+      }
+    } catch (err) {
+      console.error('Error al exportar ranking a PDF:', err);
+      setMensajePdf('❌ Error al exportar ranking: ' + (err.message || 'Error inesperado'));
+    } finally {
+      setExportandoPdf(false);
+    }
   };
 
   return (
@@ -533,6 +556,147 @@ FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
               </div>
             </div>
 
+            {/* Tarjeta: Exportación Oficial de Ranking en PDF */}
+            <div
+              className="admin-card exportar-pdf-card"
+              style={{
+                border: '2px solid rgba(217, 119, 6, 0.45)',
+                background: 'linear-gradient(135deg, rgba(34, 27, 71, 0.95), rgba(48, 40, 106, 0.92))'
+              }}
+            >
+              <div className="admin-card-titulo">
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '1.25rem' }}>📄</span>
+                  <span>Exportar Reporte Oficial de Ranking (PDF)</span>
+                </span>
+                <span
+                  style={{
+                    background: 'rgba(217, 119, 6, 0.25)',
+                    border: '1px solid #f59e0b',
+                    color: '#fcd34d',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    fontSize: '0.78rem',
+                    fontWeight: 800
+                  }}
+                >
+                  PDF OFICIAL SST
+                </span>
+              </div>
+
+              <p className="admin-ayuda-txt" style={{ margin: '4px 0 10px 0', lineHeight: 1.5 }}>
+                Genera y descarga un documento PDF corporativo de alta calidad listo para imprimir o presentar a Gerencia y Talento Humano. El informe consolida automáticamente:
+              </p>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '10px',
+                  marginBottom: '14px'
+                }}
+              >
+                <div
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    padding: '10px'
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: '#fcd34d', fontSize: '0.86rem', marginBottom: '3px' }}>
+                    🥇 1. Ranking de Todos los Jugadores
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--crema-suave)', lineHeight: 1.35 }}>
+                    Listado de todos los participantes con cédula, departamento, dificultad, si venció al drenador y puntaje oficial.
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    padding: '10px'
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: '#3ddc84', fontSize: '0.86rem', marginBottom: '3px' }}>
+                    🏢 2. Ranking de Departamentos
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--crema-suave)', lineHeight: 1.35 }}>
+                    Clasificación de áreas ordenada por puntaje promedio, número de participantes y récord departamental.
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '8px',
+                    padding: '10px'
+                  }}
+                >
+                  <div style={{ fontWeight: 800, color: '#4fc3f7', fontSize: '0.86rem', marginBottom: '3px' }}>
+                    👥 3. Jugadores por Departamentos
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--crema-suave)', lineHeight: 1.35 }}>
+                    Desglose detallado área por área con las posiciones internas y el puesto general de cada colaborador.
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={handleExportarPDF}
+                  disabled={exportandoPdf}
+                  style={{
+                    background: exportandoPdf
+                      ? 'rgba(217, 119, 6, 0.5)'
+                      : 'linear-gradient(135deg, #d97706, #b45309)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '10px 20px',
+                    fontWeight: 800,
+                    fontSize: '0.92rem',
+                    cursor: exportandoPdf ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 12px rgba(217, 119, 6, 0.35)',
+                    transition: 'transform 0.15s ease'
+                  }}
+                >
+                  <span>{exportandoPdf ? '⏳ Generando documento PDF…' : '📥 Descargar Reporte Completo en PDF'}</span>
+                </button>
+
+                {exportandoPdf && (
+                  <span style={{ fontSize: '0.82rem', color: '#fcd34d' }}>
+                    Estructurando páginas y tablas...
+                  </span>
+                )}
+              </div>
+
+              {mensajePdf && (
+                <div
+                  style={{
+                    marginTop: '10px',
+                    padding: '9px 13px',
+                    borderRadius: '8px',
+                    background: mensajePdf.startsWith('✅')
+                      ? 'rgba(61, 220, 132, 0.15)'
+                      : 'rgba(239, 83, 80, 0.15)',
+                    border: `1px solid ${mensajePdf.startsWith('✅') ? '#3ddc84' : '#ef5350'}`,
+                    color: mensajePdf.startsWith('✅') ? '#b9f6ca' : '#ffcdd2',
+                    fontSize: '0.88rem'
+                  }}
+                >
+                  {mensajePdf}
+                </div>
+              )}
+            </div>
+
             {/* Tarjeta 4: Gestión y Limpieza del Ranking */}
             <div className="admin-card" style={{ border: '1px solid rgba(239, 83, 80, 0.5)' }}>
               <div className="admin-card-titulo">
@@ -664,6 +828,14 @@ FOR EACH ROW EXECUTE FUNCTION public.eliminar_ranking_trigger();`;
                   }}
                 >
                   🏆 Ver Ranking Oficial
+                </WoodButton>
+                <WoodButton
+                  color="t-naranja"
+                  chica
+                  onClick={handleExportarPDF}
+                  disabled={exportandoPdf}
+                >
+                  {exportandoPdf ? '⏳ Generando…' : '📄 Exportar PDF'}
                 </WoodButton>
               </div>
             </div>
