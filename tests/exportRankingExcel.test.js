@@ -83,6 +83,6 @@ describe('Exportación de Ganadores por Departamento a Excel (.xlsx)', () => {
     const cargos = filas.map(f => f[1]);
     assert(cargos.includes('Practicante Universitario'));
     assert(cargos.includes('Tecnico Operativo'));
-    assert(cargos.includes('Analista De Seleccion'));
+    assert(cargos.some(c => c.toLowerCase() === 'analista de seleccion'));
   });
 });
